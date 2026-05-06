@@ -14,6 +14,7 @@ from androbugger.db.audit import log as audit_log
 from androbugger.db.database import get_db
 from androbugger.device import adb as adb_module
 from androbugger.device import manager
+from androbugger.knowledge.indexer import index_resolved_diagnosis, search_knowledge
 from androbugger.llm import prompts, router as llm_router
 from androbugger.llm.verifier import verify_citations
 from androbugger.parser import bugreport as br_parser
@@ -116,15 +117,33 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
                 "low_memory_events": summary.low_memory_events_count,
             })
 
-            # 4. LLM analysis
+            # 4. Knowledge retrieval — find relevant past cases before LLM call
             device = manager.get_device(device_serial) if device_serial in {d.serial for d in manager.list_connected()} else None
             device_info = device.to_dict() if device else {}
+            knowledge_context: list[dict] = []
+            try:
+                summary_query = " ".join(filter(None, [
+                    summary.severity,
+                    " ".join(e.tag for e in summary.top_errors[:5]),
+                    " ".join(t.signal_name for t in summary.tombstones[:2]),
+                ]))
+                knowledge_context = search_knowledge(
+                    query=summary_query,
+                    device_model=device_info.get("model"),
+                    namespace="past_diagnoses",
+                    top_k=5,
+                )
+            except Exception:
+                pass  # knowledge retrieval is best-effort
 
+            # 5. LLM analysis
             llm_report = None
             llm_provider = None
             llm_tokens = None
             try:
-                messages = prompts.build_diagnostic_prompt(summary, parsed.sections, device_info=device_info)
+                messages = prompts.build_diagnostic_prompt(
+                    summary, parsed.sections, knowledge_context=knowledge_context or None, device_info=device_info
+                )
                 llm_resp = await llm_router.complete(messages, user_id=user_id, device_serial=device_serial)
                 verified = verify_citations(llm_resp.content, parsed)
                 llm_report = verified.text
@@ -139,7 +158,7 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
                 await audit_log("llm_call_failed", "warning", user_id=user_id, device_serial=device_serial,
                                 detail={"error": str(exc)})
 
-            # 5. Store session
+            # 6. Store session
             now = datetime.now(timezone.utc).isoformat()
             await db.execute(
                 """UPDATE diagnostic_sessions SET
@@ -259,8 +278,18 @@ async def resolve_session(
             (body.root_cause, body.applied_fix, body.notes, session_id),
         )
         await db.commit()
+        row = await (await db.execute("SELECT * FROM diagnostic_sessions WHERE id=?", (session_id,))).fetchone()
+
     await audit_log("session_resolved", "info", user_id=user["id"],
                     detail={"session_id": session_id, "root_cause": body.root_cause[:100]})
+
+    # Auto-index into knowledge base (best-effort, non-blocking)
+    if row:
+        try:
+            index_resolved_diagnosis(dict(row))
+        except Exception:
+            pass
+
     return {"ok": True}
 
 

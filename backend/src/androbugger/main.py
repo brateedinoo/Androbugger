@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from androbugger.api import auth, chat, commands, devices, diagnostics, logcat
+from androbugger.api import auth, chat, commands, devices, diagnostics, knowledge, logcat, plugins as plugins_api
 from androbugger.config import settings
 from androbugger.db.database import init_db
 from androbugger.db.seed import seed_defaults
@@ -36,6 +36,11 @@ async def lifespan(app: FastAPI):
     async with get_db() as db:
         rows = await (await db.execute("SELECT * FROM command_permissions")).fetchall()
         adb_module.load_permission_tiers([dict(r) for r in rows])
+
+    # Load plugins
+    from androbugger.plugins.loader import load_all_plugins
+    plugins_dir = Path(__file__).parent.parent.parent.parent.parent / "plugins"
+    load_all_plugins(plugins_dir)
 
     # Register device status broadcast callback
     manager.add_status_callback(devices.broadcast_device_event)
@@ -75,6 +80,8 @@ app.include_router(devices.router)
 app.include_router(diagnostics.router)
 app.include_router(commands.router)
 app.include_router(chat.router)
+app.include_router(knowledge.router)
+app.include_router(plugins_api.router)
 
 # WebSocket routes (logcat, chat) already registered via router includes
 app.include_router(logcat.router)
