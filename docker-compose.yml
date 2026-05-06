@@ -1,0 +1,82 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - androbugger_data:/data/androbugger
+      - ./backend/plugins:/app/plugins
+    environment:
+      - ANDROBUGGER_OLLAMA_BASE_URL=http://ollama:11434
+      - ANDROBUGGER_REDIS_URL=redis://redis:6379
+      - ANDROBUGGER_DB_PATH=/data/androbugger/androbugger.db
+      - ANDROBUGGER_SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+    depends_on:
+      - redis
+      - ollama
+    restart: unless-stopped
+    privileged: true          # Required for ADB USB passthrough
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    networks:
+      - androbugger
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    networks:
+      - androbugger
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+    networks:
+      - androbugger
+    restart: unless-stopped
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - androbugger
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - androbugger
+    restart: unless-stopped
+
+volumes:
+  androbugger_data:
+  ollama_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  androbugger:
+    driver: bridge

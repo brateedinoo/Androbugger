@@ -1,0 +1,21 @@
+{
+  "summary": { "severity": "critical", "top_errors": [], "tombstone_count": 1 },
+  "logcat": [],
+  "anr_traces": [],
+  "tombstones": [
+    {
+      "process": "com.example.app",
+      "pid": 1234,
+      "tid": 1234,
+      "signal": "11",
+      "signal_name": "SIGSEGV",
+      "fault_addr": "0x0",
+      "backtrace": [
+        { "frame_num": 0, "pc": "001234a4", "library": "/system/lib64/libfoo.so", "function": "FooClass::process", "offset": "24" }
+      ]
+    }
+  ],
+  "dumpsys": {},
+  "dmesg": [],
+  "custom_sections": {}
+}

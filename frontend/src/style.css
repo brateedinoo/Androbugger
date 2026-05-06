@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #0f1117;
+  --color-surface: #1a1d2e;
+  --color-border: #2a2d3e;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Log level colours */
+.log-V { color: #6b7280; }
+.log-D { color: #60a5fa; }
+.log-I { color: #34d399; }
+.log-W { color: #fbbf24; }
+.log-E { color: #f87171; }
+.log-F { color: #ef4444; font-weight: 700; }

@@ -1,0 +1,5 @@
+{
+  "pattern_id": "sigsegv_libfoo",
+  "detected": true,
+  "confidence": "medium"
+}

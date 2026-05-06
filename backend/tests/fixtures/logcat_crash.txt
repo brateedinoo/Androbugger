@@ -1,0 +1,11 @@
+05-01 12:00:00.123  1234  1234 I ActivityManager: Start proc com.example.app
+05-01 12:00:01.456  1234  1235 D Choreographer: Skipped 32 frames!
+05-01 12:00:02.789  1234  1234 W InputDispatcher: No focused window
+05-01 12:00:03.000  1234  1234 E AndroidRuntime: FATAL EXCEPTION: main
+05-01 12:00:03.001  1234  1234 E AndroidRuntime: Process: com.example.app, PID: 1234
+05-01 12:00:03.002  1234  1234 E AndroidRuntime: java.lang.NullPointerException: Attempt to invoke virtual method
+05-01 12:00:03.003  1234  1234 E AndroidRuntime: 	at com.example.app.MainActivity.onCreate(MainActivity.java:42)
+05-01 12:00:04.000  1234  1234 E LowMemoryKiller: Process com.example.app killed
+05-01 12:00:05.000  1234  1234 W Thermal: thermal_zone0 temp=85000 trip_point=80000
+05-01 12:00:06.000  1234  1234 E SurfaceFlinger: Display lost connection
+05-01 12:00:07.000  1234  1234 I ActivityManager: Process com.example.app has died

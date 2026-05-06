@@ -1,0 +1,12 @@
+Subject: Input dispatching timed out (com.example.app/com.example.app.MainActivity, Waiting to send non-key event because the touched window has not finished processing certain input events that were delivered to it over 500.0ms ago.)
+Date: 2026-05-01 12:00:03
+
+Cmd line: com.example.app
+pid: 1234, tid: 1234, name: main  >>> com.example.app <<<
+
+  sysTid=1234 state=S
+
+  at android.os.MessageQueue.nativePollOnce(Native Method)
+  at android.os.MessageQueue.next(MessageQueue.java:335)
+  at android.os.Looper.loop(Looper.java:183)
+  at android.app.ActivityThread.main(ActivityThread.java:7656)

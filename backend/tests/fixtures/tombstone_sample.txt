@@ -1,0 +1,20 @@
+Tombstone written to: /data/tombstones/tombstone_00
+
+pid: 1234, tid: 1234, name: com.example.app  >>> com.example.app <<<
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0
+
+    x0   0000000000000000  x1   00000073a3e2c000  x2   0000000000000020
+    x29  00000073a3e2bfa0  x30  0000007b8e1234a4  sp   00000073a3e2bf90
+    pc   0000007b8e123498
+
+backtrace:
+  #00 pc 00000000001234a4  /system/lib64/libfoo.so (FooClass::processEvent+0x24)
+  #01 pc 0000000000234abc  /system/lib64/libbar.so (BarHandler::dispatch+0x1c)
+  #02 pc 0000000000345678  /data/app/com.example.app/lib/arm64/libnative.so (Java_com_example_app_NativeLib_process+0x48)
+
+memory map:
+  7b8e100000-7b8e200000 r-xp /system/lib64/libfoo.so
+
+open files:
+  fd 0: /dev/null
+  fd 1: /dev/null

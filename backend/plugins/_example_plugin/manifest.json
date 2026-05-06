@@ -1,0 +1,42 @@
+{
+  "id": "example-plugin",
+  "name": "Example Plugin",
+  "version": "1.0.0",
+  "author": "Androbugger Team",
+  "description": "Reference plugin that detects repeated SIGSEGV crashes in libfoo.so. Use as a template for new plugins.",
+  "license": "MIT",
+  "min_androbugger_version": "0.1.0",
+  "target_devices": {
+    "models": ["*"],
+    "firmware_versions": ["*"]
+  },
+  "entry_point": "plugin.py",
+  "capabilities": {
+    "diagnostic_patterns": [
+      {
+        "id": "sigsegv_libfoo",
+        "name": "SIGSEGV in libfoo.so",
+        "description": "Detects repeated SIGSEGV crashes in the libfoo shared library",
+        "severity": "critical"
+      }
+    ],
+    "fix_routines": [
+      {
+        "id": "clear_libfoo_cache",
+        "name": "Clear libfoo cache",
+        "description": "Clears the corrupted cache directory associated with libfoo crashes",
+        "destructive": false,
+        "requires_confirmation": true
+      }
+    ],
+    "custom_parsers": []
+  },
+  "permissions": {
+    "adb_commands": "read_only",
+    "network": false,
+    "file_system": "read",
+    "max_execution_time_seconds": 30
+  },
+  "dependencies": [],
+  "test_data": "test_fixtures/"
+}
