@@ -9,6 +9,7 @@ const router = createRouter({
     { path: '/diagnose/:sessionId', component: () => import('@/views/DiagnosticView.vue') },
     { path: '/history', component: () => import('@/views/HistoryView.vue') },
     { path: '/plugins', component: () => import('@/views/PluginsView.vue') },
+    { path: '/compare', component: () => import('@/views/FirmwareCompare.vue') },
     { path: '/admin', component: () => import('@/views/AdminView.vue') },
   ],
 })

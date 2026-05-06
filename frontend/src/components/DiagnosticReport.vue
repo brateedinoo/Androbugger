@@ -1,7 +1,7 @@
 <template>
   <div class="space-y-6">
     <!-- Summary header -->
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 flex-wrap">
       <span
         :class="[
           'px-3 py-1 rounded-full text-sm font-semibold',
@@ -11,6 +11,14 @@
         ]"
       >{{ (summary?.severity ?? 'unknown').toUpperCase() }}</span>
       <span class="text-slate-400 text-sm">Deterministic summary</span>
+      <div class="ml-auto">
+        <button
+          @click="showExport = true"
+          class="px-3 py-1.5 rounded-lg border border-[#2a2d3e] text-slate-400 hover:text-slate-200 hover:border-blue-500 text-xs transition"
+        >
+          ↓ Export
+        </button>
+      </div>
     </div>
 
     <!-- Key metrics -->
@@ -74,6 +82,11 @@
       <p class="mt-1 text-green-400">Root cause: {{ session.root_cause }}</p>
       <p class="text-green-400">Fix: {{ session.applied_fix }}</p>
     </div>
+
+    <!-- Export dialog (teleported to body) -->
+    <Teleport to="body">
+      <ExportDialog v-if="showExport" :session-id="session.id" @close="showExport = false" />
+    </Teleport>
   </div>
 </template>
 
@@ -81,11 +94,13 @@
 import { computed, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import type { Session } from '@/stores/diagnostics'
+import ExportDialog from '@/components/ExportDialog.vue'
 
 const props = defineProps<{ session: Session }>()
 defineEmits<{ resolve: [rootCause: string, appliedFix: string, notes: string] }>()
 
 const md = new MarkdownIt({ html: false, breaks: true })
+const showExport = ref(false)
 
 const summary = computed(() => {
   if (!props.session.deterministic_summary) return null
@@ -106,7 +121,6 @@ function levelClass(level: string) {
 </script>
 
 <script lang="ts">
-// Inline sub-component to avoid extra file
 const MetricBadge = {
   props: ['label', 'value', 'alert'],
   template: `

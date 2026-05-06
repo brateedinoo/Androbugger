@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from androbugger.api import auth, chat, commands, devices, diagnostics, knowledge, logcat, plugins as plugins_api
+from androbugger.api import admin, auth, chat, commands, devices, diagnostics, knowledge, logcat, plugins as plugins_api
 from androbugger.config import settings
 from androbugger.db.database import init_db
 from androbugger.db.seed import seed_defaults
@@ -82,6 +82,7 @@ app.include_router(commands.router)
 app.include_router(chat.router)
 app.include_router(knowledge.router)
 app.include_router(plugins_api.router)
+app.include_router(admin.router)
 
 # WebSocket routes (logcat, chat) already registered via router includes
 app.include_router(logcat.router)
