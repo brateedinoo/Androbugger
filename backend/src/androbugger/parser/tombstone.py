@@ -1,6 +1,7 @@
 """Native crash tombstone parser."""
 import re
-from androbugger.parser.models import Tombstone, FrameInfo
+
+from androbugger.parser.models import FrameInfo, Tombstone
 
 _PID_TID_RE = re.compile(r"pid:\s*(\d+),\s*tid:\s*(\d+),\s*name:\s*(.+?)\s*(?:>>>|$)")
 _SIGNAL_RE = re.compile(r"signal\s+(\d+)\s+\((\w+)\),\s*code.*?fault addr\s+([\w]+)")

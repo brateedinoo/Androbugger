@@ -1,6 +1,6 @@
 """Seed default data into a fresh database."""
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from argon2 import PasswordHasher
 
@@ -16,7 +16,7 @@ async def seed_defaults() -> None:
             await db.execute(
                 """INSERT INTO users (id, username, password_hash, role, force_password_change, created_at)
                    VALUES (?, 'admin', ?, 'admin', TRUE, ?)""",
-                (str(uuid.uuid4()), ph.hash("admin"), datetime.now(timezone.utc).isoformat()),
+                (str(uuid.uuid4()), ph.hash("admin"), datetime.now(UTC).isoformat()),
             )
 
         # Default LLM provider (Ollama)

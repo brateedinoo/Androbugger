@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -219,7 +219,7 @@ async def update_plugin_config(
     if not lp:
         raise HTTPException(404, "Plugin not found")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         await db.execute(
             "INSERT INTO plugin_configs (plugin_id, config_json, updated_by, updated_at)"

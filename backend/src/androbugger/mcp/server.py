@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import UTC
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 try:
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
-    from mcp.types import Tool, TextContent
+    from mcp.types import TextContent, Tool
     _MCP_AVAILABLE = True
 except ImportError:
     _MCP_AVAILABLE = False
@@ -162,14 +163,14 @@ async def _tool_list_devices(args: dict) -> str:
 
 async def _tool_diagnose(args: dict) -> str:
     import uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from androbugger.db.database import get_db
-    from androbugger.config import settings
 
     serial = args["serial"]
     template_id = args.get("template_id", "default")
     session_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     async with get_db() as db:
         # Get or create system user
@@ -201,7 +202,9 @@ async def _tool_get_report(args: dict) -> str:
     session_id = args["session_id"]
     async with get_db() as db:
         row = await (await db.execute(
-            "SELECT id, device_serial, status, started_at, completed_at, deterministic_summary, llm_report, root_cause, applied_fix FROM diagnostic_sessions WHERE id=?",
+            "SELECT id, device_serial, status, started_at, completed_at,"
+            " deterministic_summary, llm_report, root_cause, applied_fix"
+            " FROM diagnostic_sessions WHERE id=?",
             (session_id,),
         )).fetchone()
     if not row:
@@ -220,7 +223,7 @@ async def _tool_logcat(args: dict) -> str:
 
 
 async def _tool_shell(args: dict) -> str:
-    from androbugger.device.adb import shell, _get_tier_for_command
+    from androbugger.device.adb import _get_tier_for_command, shell
     serial = args["serial"]
     command = args["command"]
     cmd_parts = command.split()
@@ -252,6 +255,7 @@ async def _tool_device_info(args: dict) -> str:
 
 async def _tool_hardware_check(args: dict) -> str:
     import dataclasses
+
     from androbugger.device.hardware import run_hardware_check
     from androbugger.parser.hardware_summary import parse_hardware_results
 
@@ -369,10 +373,10 @@ async def run_server(transport: str = "stdio", port: int = 8765) -> None:
             await server.run(read_stream, write_stream, server.create_initialization_options())
     elif transport == "sse":
         try:
+            import uvicorn
             from mcp.server.sse import SseServerTransport
             from starlette.applications import Starlette
             from starlette.routing import Route
-            import uvicorn
 
             sse = SseServerTransport("/messages")
 

@@ -5,7 +5,7 @@ import json
 import logging
 from pathlib import Path
 
-from androbugger.plugins.models import LoadedPlugin, PluginManifest
+from androbugger.plugins.models import PluginManifest
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,6 @@ def run_sandboxed_test(plugin_dir: Path, manifest: PluginManifest) -> list[str]:
     Returns list of validation errors (empty = pass).
     """
     import importlib.util
-    import sys
 
     errors: list[str] = []
     entry_path = plugin_dir / manifest.entry_point
@@ -118,7 +117,7 @@ def run_sandboxed_test(plugin_dir: Path, manifest: PluginManifest) -> list[str]:
     if input_fixture.exists() and expected_fixture.exists():
         try:
             input_data = json.loads(input_fixture.read_text())
-            expected = json.loads(expected_fixture.read_text())
+            _expected = json.loads(expected_fixture.read_text())
             instance = plugin_cls()
             results = instance.diagnose(input_data, {})
             if not isinstance(results, list):

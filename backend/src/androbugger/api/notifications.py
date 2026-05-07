@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -31,7 +31,7 @@ async def create_notification(
     device_serial: str | None = None,
 ) -> int:
     """Insert a notification and push it to connected WS clients."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         cursor = await db.execute(
             """INSERT INTO notifications (user_id, kind, title, body, session_id, device_serial, read, created_at)

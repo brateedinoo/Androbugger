@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import contextmanager
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -50,7 +49,7 @@ class PluginSandbox:
             if not isinstance(result, list):
                 return []
             return [_to_dict(r) for r in result]
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Plugin diagnose() timed out after %ds", self._max_time)
             return []
         except Exception as exc:
@@ -65,7 +64,7 @@ class PluginSandbox:
                 timeout=self._max_time,
             )
             return _to_dict(result) if result else None
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Plugin fix() timed out after %ds", self._max_time)
             return None
         except Exception as exc:
@@ -100,6 +99,7 @@ class _RestrictedADB:
                 f"Plugin's adb_commands tier '{self._max_tier}' insufficient for: {' '.join(args)}"
             )
         import asyncio
+
         from androbugger.device import adb as adb_module
         loop = asyncio.new_event_loop()
         try:

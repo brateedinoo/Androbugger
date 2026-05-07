@@ -1,6 +1,6 @@
 """User CRUD operations."""
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -39,7 +39,7 @@ async def verify_password(username: str, password: str) -> dict | None:
 
 async def create_user(username: str, password: str, role: str) -> dict:
     user_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         await db.execute(
             """INSERT INTO users (id, username, password_hash, role, force_password_change, created_at)
@@ -54,7 +54,7 @@ async def update_last_login(user_id: str) -> None:
     async with get_db() as db:
         await db.execute(
             "UPDATE users SET last_login=? WHERE id=?",
-            (datetime.now(timezone.utc).isoformat(), user_id),
+            (datetime.now(UTC).isoformat(), user_id),
         )
         await db.commit()
 

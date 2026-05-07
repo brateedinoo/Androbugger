@@ -1,5 +1,6 @@
 """ANR trace file parser."""
 import re
+
 from androbugger.parser.models import ANRTrace, ThreadDump
 
 _HEADER_RE = re.compile(

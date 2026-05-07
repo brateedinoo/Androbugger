@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import UTC
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -9,16 +10,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from androbugger.api import (
-    admin, analytics, auth, chat, commands, devices, diagnostics,
-    groups, knowledge, logcat, mirror, notifications,
-    plugins as plugins_api, scheduled_diagnostics, system, webhooks,
+    admin,
+    analytics,
+    auth,
+    chat,
+    commands,
+    devices,
+    diagnostics,
+    groups,
+    knowledge,
+    logcat,
+    mirror,
+    notifications,
+    scheduled_diagnostics,
+    system,
+    webhooks,
+)
+from androbugger.api import (
+    plugins as plugins_api,
 )
 from androbugger.config import settings
 from androbugger.db.database import init_db
 from androbugger.db.seed import seed_defaults
 from androbugger.device import adb as adb_module
 from androbugger.device import manager
-from androbugger.device.models import DeviceInfo
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -147,9 +162,10 @@ async def _tick_schedules() -> None:
                     "SELECT cron_expr FROM scheduled_diagnostics WHERE id=?", (schedule_id,)
                 )).fetchone()
                 if sched_row:
+                    from datetime import datetime
+
                     from croniter import croniter
-                    from datetime import datetime, timezone
-                    c = croniter(sched_row["cron_expr"], datetime.now(timezone.utc))
+                    c = croniter(sched_row["cron_expr"], datetime.now(UTC))
                     next_run = c.get_next(datetime).isoformat()
                     await db.execute(
                         "UPDATE scheduled_diagnostics SET next_run_at=? WHERE id=?",

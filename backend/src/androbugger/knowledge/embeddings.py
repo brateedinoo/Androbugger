@@ -1,5 +1,4 @@
 """Local embedding generation via sentence-transformers or Ollama."""
-import asyncio
 import logging
 from functools import lru_cache
 

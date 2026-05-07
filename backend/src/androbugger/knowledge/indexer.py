@@ -2,10 +2,9 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from androbugger.knowledge.embeddings import get_embedder
@@ -58,7 +57,7 @@ def index_resolved_diagnosis(session: dict) -> list[str]:
     store = get_store()
     embedder = get_embedder()
     entry_ids: list[str] = []
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     for i, chunk in enumerate(_chunk(content)):
         entry_id = str(uuid.uuid4())

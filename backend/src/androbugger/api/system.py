@@ -1,6 +1,6 @@
 """System health and data-retention management endpoints."""
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -93,7 +93,7 @@ async def update_retention(
     if body.max_age_days < 1:
         raise HTTPException(400, "max_age_days must be >= 1")
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         await db.execute(
             "INSERT INTO retention_policies (entity, max_age_days, enabled, updated_by, updated_at)"

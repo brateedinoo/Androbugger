@@ -1,6 +1,5 @@
 """JWT authentication middleware and FastAPI dependencies."""
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -9,14 +8,13 @@ from jose import JWTError, jwt
 
 from androbugger.auth.roles import role_gte
 from androbugger.config import settings
-from androbugger.db.database import get_db
 
 _ALGORITHM = "HS256"
 _bearer = HTTPBearer(auto_error=False)
 
 
 def create_access_token(user_id: str, username: str, role: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.access_token_expire_hours)
+    expire = datetime.now(UTC) + timedelta(hours=settings.access_token_expire_hours)
     return jwt.encode(
         {"sub": user_id, "username": username, "role": role, "exp": expire, "type": "access"},
         settings.secret_key,
@@ -25,7 +23,7 @@ def create_access_token(user_id: str, username: str, role: str) -> str:
 
 
 def create_refresh_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.refresh_token_expire_hours)
+    expire = datetime.now(UTC) + timedelta(hours=settings.refresh_token_expire_hours)
     return jwt.encode(
         {"sub": user_id, "exp": expire, "type": "refresh"},
         settings.secret_key,

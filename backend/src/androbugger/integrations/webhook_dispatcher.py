@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -51,7 +51,7 @@ async def _deliver(
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(endpoint["url"], content=body, headers=headers)
         response_status = resp.status_code
-        delivered_at = datetime.now(timezone.utc).isoformat()
+        delivered_at = datetime.now(UTC).isoformat()
         if resp.is_error:
             error = f"HTTP {resp.status_code}"
     except Exception as exc:
@@ -81,7 +81,7 @@ async def test_endpoint(endpoint_id: str) -> dict:
     if not row:
         return {"error": "Endpoint not found"}
 
-    payload = {"event": "test", "timestamp": datetime.now(timezone.utc).isoformat()}
+    payload = {"event": "test", "timestamp": datetime.now(UTC).isoformat()}
     body = json.dumps(payload)
     sig = hmac.new(
         row["secret"].encode(), body.encode(), hashlib.sha256

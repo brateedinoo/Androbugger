@@ -2,7 +2,7 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from androbugger.auth.middleware import get_current_user, require_role
@@ -10,7 +10,6 @@ from androbugger.auth.roles import role_gte
 from androbugger.db.audit import log as audit_log
 from androbugger.db.database import get_db
 from androbugger.device import adb as adb_module
-from androbugger.device import manager
 from androbugger.llm import router as llm_router
 
 router = APIRouter(prefix="/api/commands", tags=["commands"])
@@ -18,9 +17,11 @@ router = APIRouter(prefix="/api/commands", tags=["commands"])
 _NL_SYSTEM = (
     "Translate the following user intent into one or more ADB shell commands. "
     "Respond ONLY with valid JSON in the format: "
-    '{\"commands\": [{\"cmd\": \"logcat -v threadtime -t 100\", \"destructive\": false, \"explanation\": \"Gets last 100 log lines\"}]}. '
+    '{"commands": [{"cmd": "logcat -v threadtime -t 100", "destructive": false,'
+    ' "explanation": "Gets last 100 log lines"}]}. '
     "Do not include 'adb shell' prefix — just the shell command. "
-    "Mark destructive=true only for commands that irreversibly modify device state (reboot, factory reset, wipe, rm, format)."
+    "Mark destructive=true only for commands that irreversibly modify device state "
+    "(reboot, factory reset, wipe, rm, format)."
 )
 
 
@@ -109,7 +110,13 @@ async def execute_commands(body: ExecuteRequest, user: Annotated[dict, Depends(g
     interp = ""
     try:
         msgs = [
-            {"role": "system", "content": "You are an Android device expert. Interpret the following ADB command output in plain language. Be concise."},
+            {
+                "role": "system",
+                "content": (
+                    "You are an Android device expert. Interpret the following ADB command output "
+                    "in plain language. Be concise."
+                ),
+            },
             {"role": "user", "content": combined[:4000]},
         ]
         iresp = await llm_router.complete(msgs, user_id=user["id"])

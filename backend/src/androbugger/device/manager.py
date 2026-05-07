@@ -1,8 +1,8 @@
 """Device discovery, connection pool, and status broadcasting."""
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 import adbutils
 
@@ -55,8 +55,8 @@ async def _enrich_device(serial: str, connection_type: str, ip: str | None = Non
         ip_address=ip,
         android_version=props.get("ro.build.version.release"),
         build_fingerprint=props.get("ro.build.fingerprint"),
-        connected_at=datetime.now(timezone.utc),
-        last_seen=datetime.now(timezone.utc),
+        connected_at=datetime.now(UTC),
+        last_seen=datetime.now(UTC),
     )
 
 
@@ -133,7 +133,7 @@ async def poll_devices() -> None:
 
             # Update last_seen
             for serial in current_serials & set(_devices.keys()):
-                _devices[serial].last_seen = datetime.now(timezone.utc)
+                _devices[serial].last_seen = datetime.now(UTC)
 
         except Exception as exc:
             logger.warning("Device poll error: %s", exc)

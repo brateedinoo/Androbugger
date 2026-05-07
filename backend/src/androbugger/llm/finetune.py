@@ -4,8 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ async def _export_training_data_async(output_path: Path, min_quality: float) -> 
                 record_count += 1
 
         # Record export in DB
-        exported_at = datetime.now(timezone.utc).isoformat()
+        exported_at = datetime.now(UTC).isoformat()
         try:
             # Use first resolved session's user_id as fallback exporter
             first_row = rows[0] if rows else None
@@ -161,7 +161,7 @@ async def _export_for_user_async(output_path: Path, user_id: str, min_quality: f
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 record_count += 1
 
-        exported_at = datetime.now(timezone.utc).isoformat()
+        exported_at = datetime.now(UTC).isoformat()
         try:
             await db.execute(
                 """INSERT INTO finetune_exports (exported_at, exported_by, record_count, output_path, filters_json)
@@ -223,9 +223,8 @@ def validate_training_data(input_path: str | Path) -> ValidationResult:
 
 def evaluate_model(model_id: str, eval_set_path: str | Path) -> EvalResult:
     """Evaluate a model against a JSONL eval set using ROUGE-L."""
-    try:
-        from rouge_score import rouge_scorer
-    except ImportError:
+    import importlib.util
+    if importlib.util.find_spec("rouge_score") is None:
         raise RuntimeError("rouge-score is not installed. Run: pip install rouge-score")
 
     import asyncio

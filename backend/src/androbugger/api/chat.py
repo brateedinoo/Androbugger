@@ -1,8 +1,7 @@
 """AI chat WebSocket endpoint and explain-this REST endpoint."""
-import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -10,9 +9,8 @@ from pydantic import BaseModel
 
 from androbugger.auth.middleware import get_current_user
 from androbugger.db.database import get_db
-from androbugger.llm import prompts, router as llm_router
-from androbugger.llm.verifier import verify_citations
-from androbugger.parser.models import ParsedBugreport
+from androbugger.llm import prompts
+from androbugger.llm import router as llm_router
 
 router = APIRouter(tags=["chat"])
 
@@ -28,11 +26,17 @@ async def explain_lines(
     user: Annotated[dict, Depends(get_current_user)],
 ):
     lines_text = "\n".join(
-        f"[Line {l.get('line_number', '?')}] {l.get('text', '')}"
-        for l in body.selected_lines[:50]
+        f"[Line {ln.get('line_number', '?')}] {ln.get('text', '')}"
+        for ln in body.selected_lines[:50]
     )
     messages = [
-        {"role": "system", "content": "You are an Android system log expert. Explain the following logcat entries clearly. State whether they indicate a problem and what the likely cause is."},
+        {
+            "role": "system",
+            "content": (
+                "You are an Android system log expert. Explain the following logcat entries clearly. "
+                "State whether they indicate a problem and what the likely cause is."
+            ),
+        },
         {"role": "user", "content": f"Explain these logcat entries:\n\n{lines_text}"},
     ]
     try:
@@ -79,7 +83,7 @@ async def ws_chat(websocket: WebSocket, session_id: str):
 
             # Save user message
             msg_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             async with get_db() as db:
                 await db.execute(
                     "INSERT INTO chat_messages (id, session_id, role, content, timestamp) VALUES (?,?,?,?,?)",
@@ -102,7 +106,7 @@ async def ws_chat(websocket: WebSocket, session_id: str):
 
             # Save assistant response
             asst_id = str(uuid.uuid4())
-            now2 = datetime.now(timezone.utc).isoformat()
+            now2 = datetime.now(UTC).isoformat()
             async with get_db() as db:
                 await db.execute(
                     "INSERT INTO chat_messages (id, session_id, role, content, timestamp) VALUES (?,?,?,?,?)",

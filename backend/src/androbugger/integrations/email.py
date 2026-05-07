@@ -14,9 +14,10 @@ async def send_email(to: str, subject: str, body_html: str) -> None:
         return
 
     try:
-        import aiosmtplib
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
+
+        import aiosmtplib
 
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
