@@ -68,6 +68,25 @@ async def create_notification(
         except Exception:
             pass
 
+    # Dispatch to webhooks for alert kinds
+    if kind in ("hardware_alert", "regression_detected", "plugin_error"):
+        try:
+            from androbugger.integrations.webhook_dispatcher import dispatch_event
+            event_map = {
+                "hardware_alert": "hardware.alert",
+                "regression_detected": "regression.detected",
+                "plugin_error": "plugin.error",
+            }
+            await dispatch_event(event_map[kind], {
+                "notification_id": notif_id,
+                "kind": kind,
+                "title": title,
+                "device_serial": device_serial,
+                "session_id": session_id,
+            })
+        except Exception:
+            pass
+
     return notif_id
 
 

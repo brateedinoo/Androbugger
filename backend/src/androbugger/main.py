@@ -9,9 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from androbugger.api import (
-    admin, auth, chat, commands, devices, diagnostics,
+    admin, analytics, auth, chat, commands, devices, diagnostics,
     groups, knowledge, logcat, mirror, notifications,
-    plugins as plugins_api, scheduled_diagnostics,
+    plugins as plugins_api, scheduled_diagnostics, system, webhooks,
 )
 from androbugger.config import settings
 from androbugger.db.database import init_db
@@ -57,11 +57,16 @@ async def lifespan(app: FastAPI):
     sched_task = asyncio.create_task(_run_scheduler_loop())
     logger.info("Scheduler loop started")
 
+    # Start daily data-retention task
+    retention_task = asyncio.create_task(_run_daily_retention())
+    logger.info("Retention loop started")
+
     yield
 
     poll_task.cancel()
     sched_task.cancel()
-    for t in (poll_task, sched_task):
+    retention_task.cancel()
+    for t in (poll_task, sched_task, retention_task):
         try:
             await t
         except asyncio.CancelledError:
@@ -96,6 +101,9 @@ app.include_router(admin.router)
 app.include_router(groups.router)
 app.include_router(notifications.router)
 app.include_router(scheduled_diagnostics.router)
+app.include_router(analytics.router)
+app.include_router(webhooks.router)
+app.include_router(system.router)
 
 # WebSocket routes
 app.include_router(logcat.router)
@@ -150,6 +158,36 @@ async def _tick_schedules() -> None:
                     await db.commit()
         except Exception as exc:
             logger.error("Scheduler tick error for %s: %s", schedule_id, exc)
+
+
+async def _run_daily_retention() -> None:
+    """Run data retention purge once per day at midnight UTC."""
+    from androbugger.api.system import _DEFAULT_RETENTION, _ENTITY_TS_COL
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            from androbugger.db.database import get_db
+            async with get_db() as db:
+                rows = await (await db.execute(
+                    "SELECT entity, max_age_days FROM retention_policies WHERE enabled=TRUE"
+                )).fetchall()
+                policies = {r["entity"]: r["max_age_days"] for r in rows}
+            for entity, default_days in _DEFAULT_RETENTION.items():
+                if entity not in policies:
+                    policies[entity] = default_days
+            async with get_db() as db:
+                for entity, max_days in policies.items():
+                    ts_col = _ENTITY_TS_COL[entity]
+                    await db.execute(
+                        f"DELETE FROM {entity} WHERE {ts_col} < datetime('now', ?)",
+                        (f"-{max_days} days",),
+                    )
+                await db.commit()
+            logger.info("Daily retention purge completed")
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.error("Retention purge error: %s", exc)
 
 
 @app.get("/api/health")

@@ -11,6 +11,8 @@ const router = createRouter({
     { path: '/plugins', component: () => import('@/views/PluginsView.vue') },
     { path: '/compare', component: () => import('@/views/FirmwareCompare.vue') },
     { path: '/admin', component: () => import('@/views/AdminView.vue') },
+    { path: '/analytics', component: () => import('@/views/AnalyticsView.vue') },
+    { path: '/knowledge', component: () => import('@/views/KnowledgeView.vue') },
   ],
 })
 

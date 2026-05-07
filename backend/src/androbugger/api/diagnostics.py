@@ -172,6 +172,15 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
                 (now, str(zip_path), summary_json, llm_report, llm_provider, llm_tokens, session_id),
             )
             await db.commit()
+            try:
+                from androbugger.integrations.webhook_dispatcher import dispatch_event
+                await dispatch_event("session.completed", {
+                    "session_id": session_id,
+                    "device_serial": device_serial,
+                    "status": "completed",
+                })
+            except Exception:
+                pass
 
         except Exception as exc:
             await db.execute(
@@ -180,6 +189,15 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
             await db.commit()
             await audit_log("diagnosis_failed", "warning", user_id=user_id, device_serial=device_serial,
                             detail={"error": str(exc)})
+            try:
+                from androbugger.integrations.webhook_dispatcher import dispatch_event
+                await dispatch_event("session.failed", {
+                    "session_id": session_id,
+                    "device_serial": device_serial,
+                    "error": str(exc),
+                })
+            except Exception:
+                pass
 
 
 @router.post("/start")

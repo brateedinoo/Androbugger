@@ -6,6 +6,8 @@
       <div class="flex items-center gap-4">
         <RouterLink to="/history" class="text-slate-400 hover:text-white text-sm">History</RouterLink>
         <RouterLink to="/compare" class="text-slate-400 hover:text-white text-sm">Compare</RouterLink>
+        <RouterLink v-if="auth.user?.role === 'admin' || auth.user?.role === 'developer'" to="/analytics" class="text-slate-400 hover:text-white text-sm">Analytics</RouterLink>
+        <RouterLink to="/knowledge" class="text-slate-400 hover:text-white text-sm">Knowledge</RouterLink>
         <RouterLink v-if="auth.user?.role === 'admin' || auth.user?.role === 'developer'" to="/plugins" class="text-slate-400 hover:text-white text-sm">Plugins</RouterLink>
         <RouterLink v-if="auth.user?.role === 'admin'" to="/admin" class="text-slate-400 hover:text-white text-sm">Admin</RouterLink>
         <span class="text-slate-500 text-sm">{{ auth.user?.username }}</span>

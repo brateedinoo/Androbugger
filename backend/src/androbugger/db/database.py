@@ -46,6 +46,7 @@ def _get_migrations() -> list[tuple[int, str]]:
         (1, _MIGRATION_001),
         (2, _MIGRATION_002),
         (3, _MIGRATION_003),
+        (4, _MIGRATION_004),
     ]
 
 
@@ -272,4 +273,88 @@ CREATE TABLE IF NOT EXISTS finetune_exports (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action, timestamp DESC);
+"""
+
+_MIGRATION_004 = """
+-- Rebuild knowledge_entries to extend namespace CHECK and add community columns.
+-- SQLite cannot ALTER column constraints so we rename+recreate.
+CREATE TABLE IF NOT EXISTS knowledge_entries_v2 (
+    id TEXT PRIMARY KEY,
+    namespace TEXT NOT NULL CHECK (namespace IN (
+        'vendor_docs', 'past_diagnoses', 'aosp_reference', 'manual')),
+    title TEXT NOT NULL,
+    source TEXT,
+    device_model TEXT,
+    firmware_version TEXT,
+    content_hash TEXT NOT NULL,
+    indexed_at TEXT NOT NULL,
+    metadata TEXT,
+    helpful_votes INTEGER NOT NULL DEFAULT 0,
+    unhelpful_votes INTEGER NOT NULL DEFAULT 0,
+    author_id TEXT REFERENCES users(id),
+    is_manual BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TEXT
+);
+INSERT OR IGNORE INTO knowledge_entries_v2
+    SELECT id, namespace, title, source, device_model, firmware_version,
+           content_hash, indexed_at, metadata, 0, 0, NULL, FALSE, NULL
+    FROM knowledge_entries;
+DROP TABLE knowledge_entries;
+ALTER TABLE knowledge_entries_v2 RENAME TO knowledge_entries;
+
+-- Knowledge feedback (one vote per user per entry)
+CREATE TABLE IF NOT EXISTS knowledge_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id TEXT NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    helpful BOOLEAN NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(entry_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_feedback_entry ON knowledge_feedback(entry_id);
+
+-- Outbound webhook endpoints
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL DEFAULT '',
+    events TEXT NOT NULL DEFAULT '[]',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+-- Webhook delivery log
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+    event TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    response_status INTEGER,
+    delivered_at TEXT,
+    error TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_endpoint
+    ON webhook_deliveries(endpoint_id, delivered_at DESC);
+
+-- Per-plugin runtime config overrides
+CREATE TABLE IF NOT EXISTS plugin_configs (
+    plugin_id TEXT PRIMARY KEY,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    updated_by TEXT NOT NULL REFERENCES users(id),
+    updated_at TEXT NOT NULL
+);
+
+-- Data retention policies
+CREATE TABLE IF NOT EXISTS retention_policies (
+    entity TEXT PRIMARY KEY
+        CHECK (entity IN (
+            'diagnostic_sessions','audit_log','webhook_deliveries','notifications')),
+    max_age_days INTEGER NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_by TEXT NOT NULL REFERENCES users(id),
+    updated_at TEXT NOT NULL
+);
 """

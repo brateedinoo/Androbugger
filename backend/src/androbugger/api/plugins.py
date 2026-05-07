@@ -1,9 +1,11 @@
 """Plugin management REST endpoints."""
 import asyncio
+import json
 import shutil
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -13,6 +15,7 @@ from pydantic import BaseModel
 
 from androbugger.auth.middleware import get_current_user, require_role
 from androbugger.config import settings
+from androbugger.db.database import get_db
 from androbugger.plugins import loader as plugin_loader
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
@@ -169,4 +172,121 @@ async def install_plugin(
         }
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ── Plugin versioning & runtime config ────────────────────────────────────────
+
+@router.get("/{plugin_id}/config")
+async def get_plugin_config(
+    plugin_id: str,
+    user: Annotated[dict, Depends(require_role("developer"))],
+):
+    """Return merged config: manifest metadata defaults + DB overrides."""
+    lp = plugin_loader.get_plugin(plugin_id)
+    if not lp:
+        raise HTTPException(404, "Plugin not found")
+
+    defaults: dict = {}
+    manifest_path = Path(lp.manifest_path) if lp.manifest_path else None
+    if manifest_path and manifest_path.exists():
+        try:
+            mdata = json.loads(manifest_path.read_text())
+            defaults = mdata.get("metadata", {})
+        except Exception:
+            pass
+
+    async with get_db() as db:
+        row = await (await db.execute(
+            "SELECT config_json FROM plugin_configs WHERE plugin_id=?", (plugin_id,)
+        )).fetchone()
+
+    overrides = json.loads(row["config_json"]) if row else {}
+    merged = {**defaults, **overrides}
+    return {"plugin_id": plugin_id, "config": merged, "defaults": defaults, "overrides": overrides}
+
+
+class PluginConfigUpdate(BaseModel):
+    config: dict
+
+
+@router.put("/{plugin_id}/config")
+async def update_plugin_config(
+    plugin_id: str,
+    body: PluginConfigUpdate,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    lp = plugin_loader.get_plugin(plugin_id)
+    if not lp:
+        raise HTTPException(404, "Plugin not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    async with get_db() as db:
+        await db.execute(
+            "INSERT INTO plugin_configs (plugin_id, config_json, updated_by, updated_at)"
+            " VALUES (?,?,?,?)"
+            " ON CONFLICT(plugin_id) DO UPDATE SET config_json=excluded.config_json,"
+            "   updated_by=excluded.updated_by, updated_at=excluded.updated_at",
+            (plugin_id, json.dumps(body.config), user["id"], now),
+        )
+        await db.commit()
+
+    # Reload plugin so new config takes effect
+    if lp.manifest_path:
+        plugin_loader._load_plugin_dir(Path(lp.manifest_path).parent)
+
+    return {"ok": True}
+
+
+@router.post("/{plugin_id}/update")
+async def update_plugin(
+    plugin_id: str,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """Pull latest from git and reload the plugin."""
+    lp = plugin_loader.get_plugin(plugin_id)
+    if not lp:
+        raise HTTPException(404, "Plugin not found")
+
+    plugin_dir = Path(lp.manifest_path).parent if lp.manifest_path else None
+    if not plugin_dir or not (plugin_dir / ".git").exists():
+        raise HTTPException(400, "Plugin directory is not a git repository")
+
+    old_version: str = "unknown"
+    try:
+        mdata = json.loads((plugin_dir / "manifest.json").read_text())
+        old_version = mdata.get("version", "unknown")
+    except Exception:
+        pass
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None,
+        lambda: subprocess.run(
+            ["git", "pull"],
+            cwd=str(plugin_dir),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ),
+    )
+    if result.returncode != 0:
+        raise HTTPException(400, f"git pull failed: {result.stderr[:200]}")
+
+    new_version: str = old_version
+    try:
+        mdata = json.loads((plugin_dir / "manifest.json").read_text())
+        new_version = mdata.get("version", old_version)
+    except Exception:
+        pass
+
+    plugin_loader._load_plugin_dir(plugin_dir)
+
+    return {
+        "ok": True,
+        "plugin_id": plugin_id,
+        "old_version": old_version,
+        "new_version": new_version,
+        "changed": old_version != new_version,
+        "git_output": result.stdout.strip()[:200],
+    }
 

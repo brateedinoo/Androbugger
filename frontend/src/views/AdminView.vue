@@ -347,6 +347,138 @@
           </div>
         </div>
 
+        <!-- ── Integrations tab ───────────────────────────────── -->
+        <div v-if="activeTab === 'integrations'" class="space-y-6 max-w-4xl">
+          <div class="flex items-center justify-between">
+            <h2 class="text-base font-semibold">Webhook Endpoints</h2>
+            <button @click="showAddWebhook = true"
+              class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg">
+              + Add Webhook
+            </button>
+          </div>
+
+          <div v-if="webhooks.length === 0" class="text-slate-500 text-sm text-center py-8">
+            No webhook endpoints configured.
+          </div>
+
+          <div class="space-y-3">
+            <div v-for="wh in webhooks" :key="wh.id"
+              class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4 space-y-2">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-semibold text-sm">{{ wh.name }}</p>
+                  <p class="text-slate-400 text-xs font-mono truncate max-w-xs">{{ wh.url }}</p>
+                  <div class="flex flex-wrap gap-1 mt-1">
+                    <span v-for="ev in parseEvents(wh.events)" :key="ev"
+                      class="text-[10px] bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded-full">{{ ev }}</span>
+                    <span v-if="!parseEvents(wh.events).length" class="text-slate-600 text-xs">no events</span>
+                  </div>
+                </div>
+                <div class="flex gap-2 shrink-0">
+                  <button @click="testWebhook(wh.id)"
+                    class="text-xs border border-[#2a2d3e] hover:border-blue-500 text-slate-400 hover:text-slate-200 px-2 py-1 rounded transition">
+                    Test
+                  </button>
+                  <button @click="toggleWebhookEnabled(wh)"
+                    :class="wh.enabled ? 'text-green-400 hover:text-slate-300' : 'text-slate-500 hover:text-green-400'"
+                    class="text-xs px-2 py-1 rounded transition">
+                    {{ wh.enabled ? '● On' : '○ Off' }}
+                  </button>
+                  <button @click="deleteWebhook(wh.id)"
+                    class="text-xs text-red-500 hover:text-red-400 px-2 py-1 rounded transition">Delete</button>
+                </div>
+              </div>
+              <p v-if="webhookTestResult[wh.id]" class="text-xs"
+                :class="webhookTestResult[wh.id].ok ? 'text-green-400' : 'text-red-400'">
+                {{ webhookTestResult[wh.id].ok
+                  ? `✓ HTTP ${webhookTestResult[wh.id].status}`
+                  : `✗ ${webhookTestResult[wh.id].error}` }}
+              </p>
+            </div>
+          </div>
+
+          <!-- Add webhook modal -->
+          <div v-if="showAddWebhook"
+            class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div class="bg-[#1a1d2e] rounded-xl p-6 w-full max-w-md space-y-4">
+              <h3 class="font-semibold">Add Webhook</h3>
+              <input v-model="newWebhook.name" placeholder="Name"
+                class="w-full bg-[#0f1117] border border-[#2a2d3e] rounded px-3 py-2 text-sm" />
+              <input v-model="newWebhook.url" placeholder="https://example.com/webhook"
+                class="w-full bg-[#0f1117] border border-[#2a2d3e] rounded px-3 py-2 text-sm" />
+              <input v-model="newWebhook.secret" placeholder="HMAC secret (optional)"
+                class="w-full bg-[#0f1117] border border-[#2a2d3e] rounded px-3 py-2 text-sm" />
+              <div>
+                <p class="text-slate-400 text-xs mb-2">Events:</p>
+                <div class="flex flex-wrap gap-2">
+                  <label v-for="ev in availableEvents" :key="ev" class="flex items-center gap-1 text-xs text-slate-300">
+                    <input type="checkbox" :value="ev" v-model="newWebhook.events" class="rounded" />
+                    {{ ev }}
+                  </label>
+                </div>
+              </div>
+              <div class="flex gap-3 justify-end">
+                <button @click="showAddWebhook = false" class="text-sm text-slate-400 hover:text-white px-3 py-1.5">Cancel</button>
+                <button @click="createWebhook"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5 rounded-lg">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── System tab ─────────────────────────────────────── -->
+        <div v-if="activeTab === 'system'" class="space-y-6 max-w-3xl">
+          <h2 class="text-base font-semibold">System Health</h2>
+
+          <div v-if="sysHealth" class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+              <p class="text-slate-400 text-xs">DB Size</p>
+              <p class="text-xl font-bold mt-1">{{ fmtBytes(sysHealth.db_size_bytes) }}</p>
+            </div>
+            <div class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+              <p class="text-slate-400 text-xs">Sessions</p>
+              <p class="text-xl font-bold mt-1">{{ sysHealth.session_count }}</p>
+            </div>
+            <div class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+              <p class="text-slate-400 text-xs">Knowledge Entries</p>
+              <p class="text-xl font-bold mt-1">{{ sysHealth.knowledge_entry_count }}</p>
+            </div>
+            <div class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4">
+              <p class="text-slate-400 text-xs">Active Schedules</p>
+              <p class="text-xl font-bold mt-1">{{ sysHealth.active_scheduled_count }}</p>
+            </div>
+            <div class="bg-[#0f1117] border border-[#2a2d3e] rounded-xl p-4 col-span-2">
+              <p class="text-slate-400 text-xs">Next Scheduled Run</p>
+              <p class="text-sm font-semibold mt-1">{{ sysHealth.next_scheduled_run?.slice(0, 16).replace('T', ' ') ?? '—' }}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between mt-4">
+            <h2 class="text-base font-semibold">Data Retention</h2>
+            <button @click="runRetention"
+              class="text-xs border border-[#2a2d3e] hover:border-red-500 text-slate-400 hover:text-red-400 px-3 py-1.5 rounded transition">
+              Run Now
+            </button>
+          </div>
+          <p v-if="retentionResult" class="text-green-400 text-sm">{{ retentionResult }}</p>
+
+          <div class="space-y-2">
+            <div v-for="policy in retentionPolicies" :key="policy.entity"
+              class="flex items-center gap-3 bg-[#0f1117] border border-[#2a2d3e] rounded-xl px-4 py-3">
+              <span class="text-sm font-mono flex-1">{{ policy.entity }}</span>
+              <input v-model.number="policy.max_age_days" type="number" min="1"
+                class="w-20 bg-[#1a1d2e] border border-[#2a2d3e] rounded px-2 py-1 text-sm text-right" />
+              <span class="text-slate-400 text-sm">days</span>
+              <label class="flex items-center gap-1 text-xs text-slate-400">
+                <input type="checkbox" v-model="policy.enabled" class="rounded" />
+                Enabled
+              </label>
+              <button @click="saveRetentionPolicy(policy)"
+                class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded">Save</button>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -366,6 +498,8 @@ const tabs = [
   { id: 'llm', label: 'LLM Providers' },
   { id: 'finetune', label: 'Fine-Tuning' },
   { id: 'scheduled', label: 'Scheduled' },
+  { id: 'integrations', label: 'Integrations' },
+  { id: 'system', label: 'System' },
 ]
 const activeTab = ref('stats')
 const currentUserId = computed(() => auth.user?.id)
@@ -594,6 +728,104 @@ async function deleteSchedule(id: string) {
   } catch { /* ignore */ }
 }
 
+// ── Integrations (webhooks) ────────────────────────────────────────────
+const webhooks = ref<any[]>([])
+const showAddWebhook = ref(false)
+const webhookTestResult = ref<Record<string, any>>({})
+const newWebhook = ref({ name: '', url: '', secret: '', events: [] as string[] })
+const availableEvents = [
+  'session.completed', 'session.failed', 'hardware.alert',
+  'regression.detected', 'plugin.error',
+]
+
+function parseEvents(raw: string | string[]): string[] {
+  if (Array.isArray(raw)) return raw
+  try { return JSON.parse(raw) } catch { return [] }
+}
+
+async function loadWebhooks() {
+  try {
+    const data = await $fetch('/api/webhooks', { headers: auth.authHeaders() })
+    webhooks.value = data.webhooks ?? []
+  } catch { /* ignore */ }
+}
+
+async function createWebhook() {
+  try {
+    await $fetch('/api/webhooks', {
+      method: 'POST', headers: auth.authHeaders(), body: newWebhook.value
+    })
+    showAddWebhook.value = false
+    newWebhook.value = { name: '', url: '', secret: '', events: [] }
+    await loadWebhooks()
+  } catch { /* ignore */ }
+}
+
+async function deleteWebhook(id: string) {
+  if (!confirm('Delete webhook endpoint?')) return
+  await $fetch(`/api/webhooks/${id}`, { method: 'DELETE', headers: auth.authHeaders() })
+  await loadWebhooks()
+}
+
+async function toggleWebhookEnabled(wh: any) {
+  await $fetch(`/api/webhooks/${wh.id}`, {
+    method: 'PUT', headers: auth.authHeaders(),
+    body: { enabled: !wh.enabled },
+  })
+  await loadWebhooks()
+}
+
+async function testWebhook(id: string) {
+  try {
+    const result = await $fetch(`/api/webhooks/${id}/test`, {
+      method: 'POST', headers: auth.authHeaders()
+    })
+    webhookTestResult.value[id] = result
+    setTimeout(() => { delete webhookTestResult.value[id] }, 5000)
+  } catch { /* ignore */ }
+}
+
+// ── System health & retention ──────────────────────────────────────────
+const sysHealth = ref<any>(null)
+const retentionPolicies = ref<any[]>([])
+const retentionResult = ref('')
+
+async function loadSystem() {
+  try {
+    const [health, retention] = await Promise.all([
+      $fetch('/api/system/health', { headers: auth.authHeaders() }),
+      $fetch('/api/system/retention', { headers: auth.authHeaders() }),
+    ])
+    sysHealth.value = health
+    retentionPolicies.value = retention.policies ?? []
+  } catch { /* ignore */ }
+}
+
+async function saveRetentionPolicy(policy: any) {
+  await $fetch(`/api/system/retention/${policy.entity}`, {
+    method: 'PUT', headers: auth.authHeaders(),
+    body: { max_age_days: policy.max_age_days, enabled: policy.enabled },
+  })
+}
+
+async function runRetention() {
+  if (!confirm('Run retention purge now? This deletes old records permanently.')) return
+  const result = await $fetch('/api/system/retention/run', {
+    method: 'POST', headers: auth.authHeaders()
+  })
+  const summary = Object.entries(result.deleted)
+    .map(([k, v]) => `${k}: ${v} deleted`)
+    .join(', ')
+  retentionResult.value = `Purge complete — ${summary}`
+  setTimeout(() => { retentionResult.value = '' }, 8000)
+}
+
+function fmtBytes(b: number): string {
+  if (b < 1024) return `${b} B`
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
+  return `${(b / 1024 / 1024).toFixed(1)} MB`
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────
 watch(activeTab, (tab) => {
   if (tab === 'stats') loadStats()
@@ -602,6 +834,8 @@ watch(activeTab, (tab) => {
   else if (tab === 'llm') loadProviders()
   else if (tab === 'finetune') loadFinetuneStats()
   else if (tab === 'scheduled') loadSchedules()
+  else if (tab === 'integrations') loadWebhooks()
+  else if (tab === 'system') loadSystem()
 })
 
 onMounted(loadStats)

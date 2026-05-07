@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     # MCP
     mcp_api_key: str = ""
 
+    # SMTP (leave smtp_host empty to disable email)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "androbugger@localhost"
+
+    # Webhooks
+    webhook_retry_attempts: int = 3
+
     # Diagnostic templates
     diagnostic_templates: dict = {
         "default": {"name": "Standard Diagnostic", "focus_areas": []},

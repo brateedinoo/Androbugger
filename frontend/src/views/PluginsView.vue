@@ -44,7 +44,7 @@
                 <p class="text-slate-400 text-sm mt-1">{{ plugin.description }}</p>
                 <p class="text-slate-600 text-xs mt-0.5">by {{ plugin.author }}</p>
               </div>
-              <div v-if="isAdmin" class="flex gap-2 flex-shrink-0">
+              <div v-if="isAdmin" class="flex gap-2 flex-shrink-0 flex-wrap">
                 <button v-if="plugin.status === 'disabled' || plugin.status === 'failed'"
                   @click="togglePlugin(plugin, 'enable')" :disabled="plugin.status === 'failed'"
                   class="px-3 py-1.5 rounded-md text-xs bg-green-800 hover:bg-green-700 disabled:bg-[#2a2d3e] disabled:cursor-not-allowed text-white transition-colors">
@@ -57,6 +57,14 @@
                 <button @click="reloadPlugin(plugin)"
                   class="px-3 py-1.5 rounded-md text-xs border border-[#2a2d3e] hover:border-blue-500 text-slate-400 hover:text-slate-200 transition-colors">
                   Reload
+                </button>
+                <button @click="toggleConfig(plugin)"
+                  class="px-3 py-1.5 rounded-md text-xs border border-[#2a2d3e] hover:border-purple-500 text-slate-400 hover:text-slate-200 transition-colors">
+                  Config
+                </button>
+                <button @click="updatePlugin(plugin)" :disabled="updatingPlugin === plugin.id"
+                  class="px-3 py-1.5 rounded-md text-xs border border-[#2a2d3e] hover:border-green-500 text-slate-400 hover:text-green-300 transition-colors disabled:opacity-50">
+                  {{ updatingPlugin === plugin.id ? 'Updating…' : 'Update' }}
                 </button>
               </div>
             </div>
@@ -105,6 +113,25 @@
                     <span class="text-slate-300">FS: {{ plugin.permissions?.file_system || 'none' }}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Config panel -->
+            <div v-if="configOpenId === plugin.id && configData[plugin.id]"
+              class="bg-[#0f1117] border border-[#2a2d3e] rounded-lg p-4 text-sm space-y-3">
+              <p class="text-slate-400 font-medium text-xs uppercase tracking-wider">Runtime Config</p>
+              <div v-for="(val, key) in configData[plugin.id].config" :key="key" class="flex items-center gap-3">
+                <label class="text-slate-400 text-xs w-40 shrink-0">{{ key }}</label>
+                <input
+                  v-model="configEdits[plugin.id][key]"
+                  class="flex-1 bg-[#1a1d2e] border border-[#2a2d3e] rounded px-2 py-1 text-xs"
+                />
+              </div>
+              <div class="flex gap-2">
+                <button @click="saveConfig(plugin)"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded">Save</button>
+                <button @click="configOpenId = null"
+                  class="text-slate-400 hover:text-white text-xs px-3 py-1.5 rounded">Cancel</button>
               </div>
             </div>
 
@@ -248,6 +275,54 @@ async function reloadPlugin(plugin: Plugin) {
     await $fetch(`/api/plugins/${plugin.id}/reload`, { method: 'POST', headers: auth.authHeaders() })
     await refresh()
   } catch (e: any) { error.value = e.data?.detail || e.message }
+}
+
+// ── Plugin config & update ─────────────────────────────────────────────
+const configOpenId = ref<string | null>(null)
+const configData = ref<Record<string, any>>({})
+const configEdits = ref<Record<string, Record<string, any>>>({})
+const updatingPlugin = ref<string | null>(null)
+
+async function toggleConfig(plugin: Plugin) {
+  if (configOpenId.value === plugin.id) {
+    configOpenId.value = null
+    return
+  }
+  try {
+    const data = await $fetch(`/api/plugins/${plugin.id}/config`, { headers: auth.authHeaders() })
+    configData.value[plugin.id] = data
+    configEdits.value[plugin.id] = { ...data.config }
+    configOpenId.value = plugin.id
+  } catch (e: any) { error.value = e.data?.detail || e.message }
+}
+
+async function saveConfig(plugin: Plugin) {
+  try {
+    await $fetch(`/api/plugins/${plugin.id}/config`, {
+      method: 'PUT',
+      headers: auth.authHeaders(),
+      body: { config: configEdits.value[plugin.id] },
+    })
+    configOpenId.value = null
+    await refresh()
+  } catch (e: any) { error.value = e.data?.detail || e.message }
+}
+
+async function updatePlugin(plugin: Plugin) {
+  updatingPlugin.value = plugin.id
+  try {
+    const result = await $fetch(`/api/plugins/${plugin.id}/update`, {
+      method: 'POST', headers: auth.authHeaders()
+    })
+    if (result.changed) {
+      error.value = ''
+      await refresh()
+      alert(`Updated ${plugin.name} from v${result.old_version} → v${result.new_version}`)
+    } else {
+      alert(`${plugin.name} is already up to date (v${result.new_version})`)
+    }
+  } catch (e: any) { error.value = e.data?.detail || e.message }
+  finally { updatingPlugin.value = null }
 }
 
 // ── Marketplace ────────────────────────────────────────────────────────
