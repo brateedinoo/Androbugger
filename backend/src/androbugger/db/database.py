@@ -45,6 +45,7 @@ def _get_migrations() -> list[tuple[int, str]]:
     return [
         (1, _MIGRATION_001),
         (2, _MIGRATION_002),
+        (3, _MIGRATION_003),
     ]
 
 
@@ -202,4 +203,73 @@ AFTER UPDATE ON diagnostic_sessions BEGIN
     VALUES (new.rowid, new.id, new.llm_report, new.deterministic_summary,
         new.root_cause, new.applied_fix, new.resolution_notes);
 END;
+"""
+
+_MIGRATION_003 = """
+CREATE TABLE IF NOT EXISTS device_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    color TEXT,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_group_members (
+    group_id TEXT NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+    device_serial TEXT NOT NULL,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (group_id, device_serial)
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_diagnostics (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    device_serial TEXT,
+    group_id TEXT REFERENCES device_groups(id),
+    cron_expr TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    template_id TEXT,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    last_run_at TEXT,
+    last_session_id TEXT REFERENCES diagnostic_sessions(id),
+    next_run_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN (
+        'session_complete','session_failed','regression_detected',
+        'scheduled_run','hardware_alert','plugin_error'
+    )),
+    title TEXT NOT NULL,
+    body TEXT,
+    session_id TEXT,
+    device_serial TEXT,
+    read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS hardware_checks (
+    id TEXT PRIMARY KEY,
+    session_id TEXT REFERENCES diagnostic_sessions(id),
+    device_serial TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    overall_status TEXT NOT NULL CHECK (overall_status IN ('pass','warning','fail')),
+    results_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS finetune_exports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exported_at TEXT NOT NULL,
+    exported_by TEXT NOT NULL REFERENCES users(id),
+    record_count INTEGER NOT NULL,
+    output_path TEXT NOT NULL,
+    filters_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action, timestamp DESC);
 """

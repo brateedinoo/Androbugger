@@ -1,0 +1,10 @@
+{
+  "props": {
+    "ro.build.version.incremental": "1.0.1",
+    "ro.build.id": "FW_1.0.1_release",
+    "ro.product.model": "IFP-86S"
+  },
+  "tombstones": [],
+  "anr": [],
+  "meminfo": {}
+}

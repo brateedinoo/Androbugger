@@ -447,6 +447,25 @@ async def resolve_session(
     return {"ok": True}
 
 
+@router.get("/{session_id}/hardware")
+async def session_hardware(session_id: str, user: Annotated[dict, Depends(get_current_user)]):
+    """Return the most recent hardware check associated with this session."""
+    import json
+    async with get_db() as db:
+        row = await (await db.execute(
+            "SELECT * FROM hardware_checks WHERE session_id=? ORDER BY checked_at DESC LIMIT 1",
+            (session_id,),
+        )).fetchone()
+    if not row:
+        return {"hardware": None}
+    hw = dict(row)
+    try:
+        hw["results"] = json.loads(hw.pop("results_json", "{}"))
+    except Exception:
+        hw["results"] = {}
+    return {"hardware": hw}
+
+
 @router.get("/search")
 async def search_sessions(q: str, user: Annotated[dict, Depends(get_current_user)]):
     async with get_db() as db:

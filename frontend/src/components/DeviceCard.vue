@@ -58,10 +58,18 @@
         Diagnose
       </button>
       <button
+        @click="$emit('hardware-check', device.serial)"
+        :disabled="hwChecking"
+        class="px-3 py-1.5 rounded-lg border border-[#2a2d3e] hover:border-blue-500 text-slate-400 hover:text-blue-300 text-sm transition disabled:opacity-50"
+        title="Run hardware check"
+      >
+        {{ hwChecking ? '…' : 'HW' }}
+      </button>
+      <button
         @click="$emit('disconnect', device.serial)"
         class="px-3 py-1.5 rounded-lg border border-[#2a2d3e] hover:border-red-500 text-slate-400 hover:text-red-400 text-sm transition"
       >
-        Disconnect
+        ✕
       </button>
     </div>
   </div>
@@ -83,11 +91,13 @@ defineProps<{
   device: DeviceInfo
   health?: Health | null
   healthLoading?: boolean
+  hwChecking?: boolean
   selected?: boolean
 }>()
 
 defineEmits<{
   diagnose: [serial: string]
+  'hardware-check': [serial: string]
   disconnect: [serial: string]
   select: [serial: string]
 }>()

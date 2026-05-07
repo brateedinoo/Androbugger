@@ -1,0 +1,5 @@
+{
+  "pattern_id": "memory_leak",
+  "detected": true,
+  "confidence": "medium"
+}

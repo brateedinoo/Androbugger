@@ -65,6 +65,10 @@
           v-if="activePanel === 'logcat'"
           :device-serial="session.device_serial"
         />
+        <ScreenMirror
+          v-if="activePanel === 'mirror'"
+          :device-serial="session.device_serial"
+        />
       </div>
     </div>
 
@@ -82,6 +86,7 @@ import DiagnosticReport from '@/components/DiagnosticReport.vue'
 import ChatPanel from '@/components/ChatPanel.vue'
 import CommandInput from '@/components/CommandInput.vue'
 import LogcatViewer from '@/components/LogcatViewer.vue'
+import ScreenMirror from '@/components/ScreenMirror.vue'
 import type { Session } from '@/stores/diagnostics'
 
 const route = useRoute()
@@ -94,6 +99,7 @@ const sidePanels = [
   { id: 'chat', label: 'AI Chat' },
   { id: 'commands', label: 'ADB Commands' },
   { id: 'logcat', label: 'Live Logcat' },
+  { id: 'mirror', label: 'Screen Mirror' },
 ]
 
 function togglePanel(id: string) {

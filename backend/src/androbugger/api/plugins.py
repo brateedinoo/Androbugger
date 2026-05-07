@@ -1,12 +1,25 @@
 """Plugin management REST endpoints."""
+import asyncio
+import shutil
+import subprocess
+import tempfile
+import time
+from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from androbugger.auth.middleware import get_current_user, require_role
+from androbugger.config import settings
 from androbugger.plugins import loader as plugin_loader
 
 router = APIRouter(prefix="/api/plugins", tags=["plugins"])
+
+# 5-minute module-level cache for marketplace results
+_marketplace_cache: dict = {"ts": 0.0, "data": None}
+_MARKETPLACE_TTL = 300  # seconds
 
 
 @router.get("")
@@ -44,3 +57,116 @@ async def reload_plugin(
         raise HTTPException(status_code=404, detail="Plugin not found")
     lp = plugin_loader.get_plugin(plugin_id)
     return {"ok": True, "plugin": lp.to_dict() if lp else {}}
+
+
+# ── Marketplace ────────────────────────────────────────────────────────────────
+
+@router.get("/marketplace")
+async def marketplace(user: Annotated[dict, Depends(require_role("developer"))]):
+    """Search GitHub for androbugger-plugin repositories (cached 5 min)."""
+    global _marketplace_cache
+
+    now = time.monotonic()
+    if _marketplace_cache["data"] is not None and (now - _marketplace_cache["ts"]) < _MARKETPLACE_TTL:
+        return {"repos": _marketplace_cache["data"], "cached": True}
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.github.com/search/repositories",
+                params={"q": "topic:androbugger-plugin", "sort": "stars", "per_page": 20},
+                headers={"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
+            )
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GitHub API error: {exc}") from exc
+
+    repos = [
+        {
+            "name": r["full_name"],
+            "description": r.get("description") or "",
+            "url": r["html_url"],
+            "clone_url": r["clone_url"],
+            "stars": r.get("stargazers_count", 0),
+            "updated_at": r.get("updated_at", ""),
+        }
+        for r in items
+    ]
+    _marketplace_cache = {"ts": now, "data": repos}
+    return {"repos": repos, "cached": False}
+
+
+# ── Install ────────────────────────────────────────────────────────────────────
+
+class InstallPluginRequest(BaseModel):
+    github_url: str
+
+
+@router.post("/install")
+async def install_plugin(
+    body: InstallPluginRequest,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """Clone a GitHub plugin repo, validate it, then move it to the plugin directory."""
+    url = body.github_url.strip()
+    if not url.startswith("https://github.com/"):
+        raise HTTPException(status_code=422, detail="github_url must start with https://github.com/")
+
+    # Run git clone in a thread pool to avoid blocking the event loop
+    tmp = tempfile.mkdtemp(prefix="androbugger_plugin_install_")
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                ["git", "clone", "--depth=1", url, tmp],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            ),
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=400, detail=f"git clone failed: {result.stderr[:300]}")
+
+        cloned_path = Path(tmp)
+
+        # Run validation in temp dir (registers into internal registry under tmp name)
+        plugin_loader._load_plugin_dir(cloned_path)
+        # Determine the plugin id from manifest.json
+        import json
+        manifest_file = cloned_path / "manifest.json"
+        if not manifest_file.exists():
+            raise HTTPException(status_code=400, detail="Plugin missing manifest.json")
+        try:
+            manifest_data = json.loads(manifest_file.read_text())
+        except Exception:
+            raise HTTPException(status_code=400, detail="Plugin manifest.json is not valid JSON")
+        plugin_id = manifest_data.get("id") or cloned_path.name
+
+        # Check validation result from registry
+        lp = plugin_loader.get_plugin(plugin_id) or plugin_loader.get_plugin(cloned_path.name)
+        if lp and lp.status == "failed":
+            errs = "; ".join(lp.validation_errors or [lp.load_error or "unknown error"])
+            raise HTTPException(status_code=400, detail=f"Plugin validation failed: {errs}")
+
+        # Move validated plugin to plugin_dir
+        dest = settings.plugin_dir / cloned_path.name
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(tmp, str(dest))
+
+        # Reload registry from the real plugin_dir so the plugin persists
+        plugin_loader.load_all_plugins(settings.plugin_dir)
+        lp_final = plugin_loader.get_plugin(plugin_id)
+
+        return {
+            "ok": True,
+            "plugin_id": plugin_id,
+            "name": manifest_data.get("name", plugin_id),
+            "version": manifest_data.get("version", "?"),
+            "status": lp_final.status if lp_final else "enabled",
+        }
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+

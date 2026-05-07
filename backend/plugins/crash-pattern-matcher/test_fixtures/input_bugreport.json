@@ -1,0 +1,15 @@
+{
+  "props": {},
+  "tombstones": [
+    {
+      "process": "com.example.player",
+      "signal_name": "SIGSEGV",
+      "backtrace": [
+        {"library": "libskia.so", "function": "SkCanvas::drawRect"},
+        {"library": "libhwui.so", "function": "RenderNode::prepareTree"}
+      ]
+    }
+  ],
+  "anr": [],
+  "meminfo": {}
+}

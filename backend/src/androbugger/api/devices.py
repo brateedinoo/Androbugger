@@ -125,6 +125,47 @@ async def device_info(serial: str, user: Annotated[dict, Depends(get_current_use
         raise HTTPException(status_code=404, detail="Device not found")
 
 
+@router.post("/{serial}/hardware-check")
+async def hardware_check(serial: str, user: Annotated[dict, Depends(get_current_user)]):
+    import uuid
+    import dataclasses
+    from androbugger.device.hardware import run_hardware_check
+    from androbugger.parser.hardware_summary import parse_hardware_results
+
+    raw = await run_hardware_check(serial)
+    summary = parse_hardware_results(raw)
+    check_id = str(uuid.uuid4())
+
+    import json
+    results_payload = {
+        "subsystems": [dataclasses.asdict(s) for s in summary.subsystems],
+    }
+
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO hardware_checks (id, session_id, device_serial, checked_at, overall_status, results_json)
+               VALUES (?, NULL, ?, ?, ?, ?)""",
+            (check_id, serial, summary.checked_at, summary.overall_status,
+             json.dumps(results_payload)),
+        )
+        await db.commit()
+
+    await audit_log(
+        action="hardware_check",
+        severity="info",
+        user_id=user["id"],
+        device_serial=serial,
+        detail={"check_id": check_id, "overall_status": summary.overall_status},
+    )
+
+    return {
+        "check_id": check_id,
+        "overall_status": summary.overall_status,
+        "checked_at": summary.checked_at,
+        "subsystems": [dataclasses.asdict(s) for s in summary.subsystems],
+    }
+
+
 # WebSocket: real-time device connect/disconnect events
 _ws_clients: list[WebSocket] = []
 

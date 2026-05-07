@@ -211,6 +211,142 @@
           </div>
         </div>
 
+        <!-- Fine-tuning tab -->
+        <div v-if="activeTab === 'finetune'" class="space-y-6 max-w-2xl">
+          <h2 class="text-base font-semibold">Fine-Tuning Data</h2>
+
+          <!-- Stats cards -->
+          <div v-if="finetuneStats" class="grid grid-cols-2 gap-4">
+            <div class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-5 text-center">
+              <p class="text-3xl font-bold text-blue-400">{{ finetuneStats.exportable_sessions }}</p>
+              <p class="text-slate-500 text-sm mt-1">Exportable Sessions</p>
+              <p class="text-slate-600 text-xs mt-0.5">resolved with root cause, fix, and LLM report</p>
+            </div>
+            <div class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-5 text-center">
+              <p v-if="finetuneStats.last_export" class="text-sm font-medium text-green-400">
+                {{ finetuneStats.last_export.record_count }} records
+              </p>
+              <p v-else class="text-2xl font-bold text-slate-500">—</p>
+              <p class="text-slate-500 text-sm mt-1">Last Export</p>
+              <p v-if="finetuneStats.last_export" class="text-slate-600 text-xs mt-0.5 truncate">
+                {{ finetuneStats.last_export.exported_at?.slice(0, 19).replace('T', ' ') }}
+              </p>
+              <p v-else class="text-slate-600 text-xs mt-0.5">never exported</p>
+            </div>
+          </div>
+
+          <!-- Export form -->
+          <div class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
+            <h3 class="text-sm font-medium text-slate-300">Export Training Data</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Output Path</label>
+                <input v-model="exportPath" placeholder="/tmp/androbugger-training.jsonl"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-white text-sm focus:outline-none focus:border-blue-500 font-mono" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Min Quality Filter</label>
+                <select v-model="exportMinQuality"
+                  class="px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none">
+                  <option :value="0.0">All (no filter)</option>
+                  <option :value="0.5">≥ 0.5</option>
+                  <option :value="0.8">≥ 0.8</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <button @click="exportFinetuneData" :disabled="exportLoading || !finetuneStats?.exportable_sessions"
+                class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium transition">
+                {{ exportLoading ? 'Exporting…' : 'Export Training Data' }}
+              </button>
+              <p v-if="exportResult" class="text-green-400 text-sm">
+                ✓ {{ exportResult.record_count }} records exported ({{ exportResult.skipped_count }} skipped)
+              </p>
+              <p v-if="exportError" class="text-red-400 text-sm">{{ exportError }}</p>
+            </div>
+          </div>
+
+          <!-- Docs link -->
+          <div class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-4 text-sm text-slate-400">
+            See <code class="text-slate-300">docs/fine-tuning-guide.md</code> for the Unsloth/LoRA fine-tuning workflow, GGUF conversion, and Ollama Modelfile template.
+          </div>
+        </div>
+
+        <!-- Scheduled diagnostics tab -->
+        <div v-if="activeTab === 'scheduled'" class="space-y-5 max-w-3xl">
+          <div class="flex items-center justify-between">
+            <h2 class="text-base font-semibold">Scheduled Diagnostics</h2>
+            <button @click="showCreateSchedule = !showCreateSchedule"
+              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition">
+              + New Schedule
+            </button>
+          </div>
+
+          <!-- Create schedule form -->
+          <div v-if="showCreateSchedule" class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
+            <h3 class="text-sm font-medium text-slate-300">New Scheduled Diagnostic</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Name</label>
+                <input v-model="newSchedule.name" placeholder="e.g. Nightly device check"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-white text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Cron Expression</label>
+                <input v-model="newSchedule.cron_expr" placeholder="0 2 * * *"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-white text-sm font-mono focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Device Serial (optional)</label>
+                <input v-model="newSchedule.device_serial" placeholder="Leave blank for group"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-white text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="block text-xs text-slate-500 mb-1">Template</label>
+                <select v-model="newSchedule.template_id"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none">
+                  <option value="">Default</option>
+                  <option value="performance">Performance Focus</option>
+                  <option value="crash">Crash Investigation</option>
+                  <option value="network">Network Diagnostic</option>
+                </select>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button @click="createSchedule" :disabled="!newSchedule.name || !newSchedule.cron_expr || scheduleLoading"
+                class="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm transition">
+                {{ scheduleLoading ? 'Creating…' : 'Create' }}
+              </button>
+              <button @click="showCreateSchedule = false"
+                class="px-4 py-2 rounded-lg border border-[#2a2d3e] text-slate-400 text-sm hover:text-slate-200 transition">Cancel</button>
+            </div>
+            <p v-if="scheduleError" class="text-red-400 text-sm">{{ scheduleError }}</p>
+          </div>
+
+          <!-- Schedule list -->
+          <div class="space-y-2">
+            <div v-for="s in schedules" :key="s.id"
+              class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-4 flex items-center justify-between gap-4">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-sm truncate">{{ s.name }}</span>
+                  <span :class="s.enabled ? 'bg-green-900 text-green-300' : 'bg-slate-800 text-slate-400'"
+                    class="px-1.5 py-0.5 rounded text-[10px]">{{ s.enabled ? 'enabled' : 'disabled' }}</span>
+                </div>
+                <div class="flex gap-4 text-xs text-slate-500 mt-1">
+                  <span class="font-mono">{{ s.cron_expr }}</span>
+                  <span v-if="s.device_serial">device: {{ s.device_serial }}</span>
+                  <span v-if="s.template_id">template: {{ s.template_id }}</span>
+                  <span v-if="s.next_run_at">next: {{ s.next_run_at?.slice(0, 16).replace('T', ' ') }}</span>
+                  <span v-if="s.last_run_at">last: {{ s.last_run_at?.slice(0, 16).replace('T', ' ') }}</span>
+                </div>
+              </div>
+              <button @click="deleteSchedule(s.id)" class="text-xs text-red-500 hover:text-red-300 flex-shrink-0 transition">Delete</button>
+            </div>
+            <p v-if="!schedules.length" class="text-slate-500 text-sm text-center py-8">No scheduled diagnostics configured</p>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -228,6 +364,8 @@ const tabs = [
   { id: 'users', label: 'Users' },
   { id: 'audit', label: 'Audit Log' },
   { id: 'llm', label: 'LLM Providers' },
+  { id: 'finetune', label: 'Fine-Tuning' },
+  { id: 'scheduled', label: 'Scheduled' },
 ]
 const activeTab = ref('stats')
 const currentUserId = computed(() => auth.user?.id)
@@ -378,12 +516,92 @@ async function toggleProvider(p: any) {
   } catch { /* ignore */ }
 }
 
+// ── Fine-Tuning ────────────────────────────────────────────────────────
+const finetuneStats = ref<any>(null)
+const exportPath = ref('/tmp/androbugger-training.jsonl')
+const exportMinQuality = ref(0.0)
+const exportLoading = ref(false)
+const exportResult = ref<any>(null)
+const exportError = ref('')
+
+async function loadFinetuneStats() {
+  try {
+    finetuneStats.value = await $fetch('/api/admin/finetune/stats', { headers: auth.authHeaders() })
+  } catch { /* ignore */ }
+}
+
+async function exportFinetuneData() {
+  exportLoading.value = true
+  exportResult.value = null
+  exportError.value = ''
+  try {
+    exportResult.value = await $fetch('/api/admin/finetune/export', {
+      method: 'POST',
+      body: { output_path: exportPath.value, min_quality: exportMinQuality.value },
+      headers: auth.authHeaders(),
+    })
+    await loadFinetuneStats()
+  } catch (e: any) {
+    exportError.value = e?.data?.detail || e.message || 'Export failed'
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+// ── Scheduled Diagnostics ──────────────────────────────────────────────
+const schedules = ref<any[]>([])
+const showCreateSchedule = ref(false)
+const scheduleLoading = ref(false)
+const scheduleError = ref('')
+const newSchedule = ref({ name: '', cron_expr: '', device_serial: '', template_id: '' })
+
+async function loadSchedules() {
+  try {
+    const data = await $fetch('/api/scheduled-diagnostics', { headers: auth.authHeaders() })
+    schedules.value = data.schedules || []
+  } catch { /* ignore */ }
+}
+
+async function createSchedule() {
+  scheduleLoading.value = true
+  scheduleError.value = ''
+  try {
+    await $fetch('/api/scheduled-diagnostics', {
+      method: 'POST',
+      body: {
+        name: newSchedule.value.name,
+        cron_expr: newSchedule.value.cron_expr,
+        device_serial: newSchedule.value.device_serial || null,
+        template_id: newSchedule.value.template_id || null,
+      },
+      headers: auth.authHeaders(),
+    })
+    newSchedule.value = { name: '', cron_expr: '', device_serial: '', template_id: '' }
+    showCreateSchedule.value = false
+    await loadSchedules()
+  } catch (e: any) {
+    scheduleError.value = e?.data?.detail || e.message
+  } finally {
+    scheduleLoading.value = false
+  }
+}
+
+async function deleteSchedule(id: string) {
+  if (!confirm('Delete this schedule?')) return
+  try {
+    await $fetch(`/api/scheduled-diagnostics/${id}`, { method: 'DELETE', headers: auth.authHeaders() })
+    await loadSchedules()
+  } catch { /* ignore */ }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────────────
 watch(activeTab, (tab) => {
   if (tab === 'stats') loadStats()
   else if (tab === 'users') loadUsers()
   else if (tab === 'audit') loadAudit()
   else if (tab === 'llm') loadProviders()
+  else if (tab === 'finetune') loadFinetuneStats()
+  else if (tab === 'scheduled') loadSchedules()
 })
 
 onMounted(loadStats)

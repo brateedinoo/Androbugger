@@ -230,3 +230,34 @@ async def update_llm_provider(
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Provider not found")
     return {"ok": True}
+
+
+# ── Fine-tuning ────────────────────────────────────────────────────────────────
+
+@router.get("/finetune/stats")
+async def finetune_stats(user: Annotated[dict, Depends(require_role("admin"))]):
+    from androbugger.llm.finetune import get_finetune_stats
+    return await get_finetune_stats()
+
+
+class FinetuneExportRequest(BaseModel):
+    output_path: str = "/tmp/androbugger-training.jsonl"
+    min_quality: float = 0.0
+
+
+@router.post("/finetune/export")
+async def finetune_export(
+    body: FinetuneExportRequest,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    from androbugger.llm.finetune import export_training_data_for_user
+    result = export_training_data_for_user(
+        body.output_path,
+        user_id=user["id"],
+        min_quality=body.min_quality,
+    )
+    return {
+        "record_count": result.record_count,
+        "skipped_count": result.skipped_count,
+        "path": result.path,
+    }
