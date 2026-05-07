@@ -1,0 +1,58 @@
+{
+  "id": "crash-pattern-matcher",
+  "name": "Crash Pattern Matcher",
+  "version": "1.0.0",
+  "author": "Androbugger Team",
+  "description": "Matches tombstone backtraces against configurable library patterns and returns known-fix information.",
+  "license": "MIT",
+  "min_androbugger_version": "0.1.0",
+  "target_devices": {
+    "models": ["*"],
+    "firmware_versions": ["*"]
+  },
+  "entry_point": "plugin.py",
+  "capabilities": {
+    "diagnostic_patterns": [
+      {
+        "id": "known_crash_pattern",
+        "name": "Known Crash Pattern",
+        "description": "Tombstone backtrace matches a known-problematic library pattern",
+        "severity": "critical"
+      }
+    ],
+    "fix_routines": [],
+    "custom_parsers": []
+  },
+  "permissions": {
+    "adb_commands": "read_only",
+    "network": false,
+    "file_system": "read",
+    "max_execution_time_seconds": 10
+  },
+  "dependencies": [],
+  "test_data": "test_fixtures/",
+  "metadata": {
+    "patterns": [
+      {
+        "regex": "libskia\\.so",
+        "name": "Skia rendering crash",
+        "known_fix": "Update GPU driver or disable hardware acceleration via adb shell settings put global gpu_debug_layers 0"
+      },
+      {
+        "regex": "libmedia\\.so|libstagefright\\.so",
+        "name": "Media framework crash",
+        "known_fix": "Clear media storage: adb shell pm clear com.android.providers.media"
+      },
+      {
+        "regex": "libEGL\\.so|libGLESv2\\.so",
+        "name": "OpenGL/EGL crash",
+        "known_fix": "Disable hardware overlays: adb shell service call SurfaceFlinger 1008 i32 1"
+      },
+      {
+        "regex": "libandroid_runtime\\.so",
+        "name": "Android runtime crash",
+        "known_fix": "Factory reset may be required. Check for OOM conditions before attempting."
+      }
+    ]
+  }
+}

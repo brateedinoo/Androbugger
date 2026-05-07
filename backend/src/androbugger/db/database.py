@@ -45,6 +45,8 @@ def _get_migrations() -> list[tuple[int, str]]:
     return [
         (1, _MIGRATION_001),
         (2, _MIGRATION_002),
+        (3, _MIGRATION_003),
+        (4, _MIGRATION_004),
     ]
 
 
@@ -202,4 +204,157 @@ AFTER UPDATE ON diagnostic_sessions BEGIN
     VALUES (new.rowid, new.id, new.llm_report, new.deterministic_summary,
         new.root_cause, new.applied_fix, new.resolution_notes);
 END;
+"""
+
+_MIGRATION_003 = """
+CREATE TABLE IF NOT EXISTS device_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    color TEXT,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS device_group_members (
+    group_id TEXT NOT NULL REFERENCES device_groups(id) ON DELETE CASCADE,
+    device_serial TEXT NOT NULL,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (group_id, device_serial)
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_diagnostics (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    device_serial TEXT,
+    group_id TEXT REFERENCES device_groups(id),
+    cron_expr TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    template_id TEXT,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    last_run_at TEXT,
+    last_session_id TEXT REFERENCES diagnostic_sessions(id),
+    next_run_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT REFERENCES users(id),
+    kind TEXT NOT NULL CHECK (kind IN (
+        'session_complete','session_failed','regression_detected',
+        'scheduled_run','hardware_alert','plugin_error'
+    )),
+    title TEXT NOT NULL,
+    body TEXT,
+    session_id TEXT,
+    device_serial TEXT,
+    read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS hardware_checks (
+    id TEXT PRIMARY KEY,
+    session_id TEXT REFERENCES diagnostic_sessions(id),
+    device_serial TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    overall_status TEXT NOT NULL CHECK (overall_status IN ('pass','warning','fail')),
+    results_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS finetune_exports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exported_at TEXT NOT NULL,
+    exported_by TEXT NOT NULL REFERENCES users(id),
+    record_count INTEGER NOT NULL,
+    output_path TEXT NOT NULL,
+    filters_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action, timestamp DESC);
+"""
+
+_MIGRATION_004 = """
+-- Rebuild knowledge_entries to extend namespace CHECK and add community columns.
+-- SQLite cannot ALTER column constraints so we rename+recreate.
+CREATE TABLE IF NOT EXISTS knowledge_entries_v2 (
+    id TEXT PRIMARY KEY,
+    namespace TEXT NOT NULL CHECK (namespace IN (
+        'vendor_docs', 'past_diagnoses', 'aosp_reference', 'manual')),
+    title TEXT NOT NULL,
+    source TEXT,
+    device_model TEXT,
+    firmware_version TEXT,
+    content_hash TEXT NOT NULL,
+    indexed_at TEXT NOT NULL,
+    metadata TEXT,
+    helpful_votes INTEGER NOT NULL DEFAULT 0,
+    unhelpful_votes INTEGER NOT NULL DEFAULT 0,
+    author_id TEXT REFERENCES users(id),
+    is_manual BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at TEXT
+);
+INSERT OR IGNORE INTO knowledge_entries_v2
+    SELECT id, namespace, title, source, device_model, firmware_version,
+           content_hash, indexed_at, metadata, 0, 0, NULL, FALSE, NULL
+    FROM knowledge_entries;
+DROP TABLE knowledge_entries;
+ALTER TABLE knowledge_entries_v2 RENAME TO knowledge_entries;
+
+-- Knowledge feedback (one vote per user per entry)
+CREATE TABLE IF NOT EXISTS knowledge_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id TEXT NOT NULL REFERENCES knowledge_entries(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    helpful BOOLEAN NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(entry_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_feedback_entry ON knowledge_feedback(entry_id);
+
+-- Outbound webhook endpoints
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL DEFAULT '',
+    events TEXT NOT NULL DEFAULT '[]',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by TEXT NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+-- Webhook delivery log
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint_id TEXT NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+    event TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    response_status INTEGER,
+    delivered_at TEXT,
+    error TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_endpoint
+    ON webhook_deliveries(endpoint_id, delivered_at DESC);
+
+-- Per-plugin runtime config overrides
+CREATE TABLE IF NOT EXISTS plugin_configs (
+    plugin_id TEXT PRIMARY KEY,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    updated_by TEXT NOT NULL REFERENCES users(id),
+    updated_at TEXT NOT NULL
+);
+
+-- Data retention policies
+CREATE TABLE IF NOT EXISTS retention_policies (
+    entity TEXT PRIMARY KEY
+        CHECK (entity IN (
+            'diagnostic_sessions','audit_log','webhook_deliveries','notifications')),
+    max_age_days INTEGER NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_by TEXT NOT NULL REFERENCES users(id),
+    updated_at TEXT NOT NULL
+);
 """

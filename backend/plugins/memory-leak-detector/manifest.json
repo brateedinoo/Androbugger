@@ -1,0 +1,37 @@
+{
+  "id": "memory-leak-detector",
+  "name": "Memory Leak Detector",
+  "version": "1.0.0",
+  "author": "Androbugger Team",
+  "description": "Flags processes with suspiciously high PSS memory usage that may indicate memory leaks.",
+  "license": "MIT",
+  "min_androbugger_version": "0.1.0",
+  "target_devices": {
+    "models": ["*"],
+    "firmware_versions": ["*"]
+  },
+  "entry_point": "plugin.py",
+  "capabilities": {
+    "diagnostic_patterns": [
+      {
+        "id": "memory_leak",
+        "name": "Memory Leak Suspect",
+        "description": "Detects processes exceeding the PSS memory threshold",
+        "severity": "warning"
+      }
+    ],
+    "fix_routines": [],
+    "custom_parsers": []
+  },
+  "permissions": {
+    "adb_commands": "read_only",
+    "network": false,
+    "file_system": "read",
+    "max_execution_time_seconds": 15
+  },
+  "dependencies": [],
+  "test_data": "test_fixtures/",
+  "metadata": {
+    "pss_threshold_mb": 300
+  }
+}

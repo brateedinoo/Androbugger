@@ -1,0 +1,12 @@
+{
+  "props": {},
+  "tombstones": [],
+  "anr": [],
+  "meminfo": {
+    "per_process": {
+      "com.example.app": {"total_pss": 409600},
+      "system_server": {"total_pss": 204800},
+      "com.android.launcher": {"total_pss": 51200}
+    }
+  }
+}

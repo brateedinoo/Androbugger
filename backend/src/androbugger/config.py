@@ -43,5 +43,26 @@ class Settings(BaseSettings):
     # Audit
     audit_retention_days: int = 90
 
+    # MCP
+    mcp_api_key: str = ""
+
+    # SMTP (leave smtp_host empty to disable email)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "androbugger@localhost"
+
+    # Webhooks
+    webhook_retry_attempts: int = 3
+
+    # Diagnostic templates
+    diagnostic_templates: dict = {
+        "default": {"name": "Standard Diagnostic", "focus_areas": []},
+        "performance": {"name": "Performance Focus", "focus_areas": ["gfxinfo", "meminfo", "thermal"]},
+        "crash": {"name": "Crash Investigation", "focus_areas": ["tombstones", "anr", "logcat"]},
+        "network": {"name": "Network Diagnostic", "focus_areas": ["connectivity", "wifi", "bluetooth"]},
+    }
+
 
 settings = Settings()

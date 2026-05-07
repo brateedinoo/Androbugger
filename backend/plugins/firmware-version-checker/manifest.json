@@ -1,0 +1,38 @@
+{
+  "id": "firmware-version-checker",
+  "name": "Firmware Version Checker",
+  "version": "1.0.0",
+  "author": "Androbugger Team",
+  "description": "Warns when the device is running a firmware version that is end-of-life or below the minimum stable version.",
+  "license": "MIT",
+  "min_androbugger_version": "0.1.0",
+  "target_devices": {
+    "models": ["*"],
+    "firmware_versions": ["*"]
+  },
+  "entry_point": "plugin.py",
+  "capabilities": {
+    "diagnostic_patterns": [
+      {
+        "id": "eol_firmware",
+        "name": "End-of-Life Firmware",
+        "description": "Detects firmware versions that are no longer supported or are known to have critical bugs",
+        "severity": "warning"
+      }
+    ],
+    "fix_routines": [],
+    "custom_parsers": []
+  },
+  "permissions": {
+    "adb_commands": "read_only",
+    "network": false,
+    "file_system": "read",
+    "max_execution_time_seconds": 10
+  },
+  "dependencies": [],
+  "test_data": "test_fixtures/",
+  "metadata": {
+    "known_eol_versions": ["1.0.0", "1.0.1", "1.1.0", "2.0.0"],
+    "minimum_stable_version": "2.4.0"
+  }
+}

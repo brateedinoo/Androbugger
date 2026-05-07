@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { $fetch } from 'ofetch'
 import { useAuthStore } from './auth'
 
@@ -75,5 +75,9 @@ export const useDevicesStore = defineStore('devices', () => {
     ws = null
   }
 
-  return { devices, fetchDevices, connectDevice, disconnectDevice, connectWebSocket, disconnectWebSocket }
+  const deviceMap = computed(() =>
+    Object.fromEntries(devices.value.map(d => [d.serial, d]))
+  )
+
+  return { devices, deviceMap, fetchDevices, connectDevice, disconnectDevice, connectWebSocket, disconnectWebSocket }
 })

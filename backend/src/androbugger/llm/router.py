@@ -1,5 +1,6 @@
-"""Provider-agnostic LLM router via LiteLLM."""
+"""Provider-agnostic LLM router via LiteLLM with Privacy Gate integration."""
 import asyncio
+import json
 import logging
 import time
 from typing import AsyncGenerator
@@ -15,13 +16,42 @@ litellm.set_verbose = False
 
 
 def _model_str(model: str | None) -> str:
-    if model:
-        return model
-    return settings.default_llm_model
+    return model if model else settings.default_llm_model
 
 
 def is_local_provider(model: str) -> bool:
-    return model.startswith("ollama/") or model.startswith("ollama_chat/")
+    return model.startswith(("ollama/", "ollama_chat/", "llama.cpp/", "vllm/"))
+
+
+def _extra_kwargs(model_id: str) -> dict:
+    return {"api_base": settings.ollama_base_url} if is_local_provider(model_id) else {}
+
+
+def _sanitize_messages(messages: list[dict], session_id: str | None, model_id: str) -> tuple[list[dict], int]:
+    """Apply Privacy Gate to message content when routing to cloud providers."""
+    if not session_id or is_local_provider(model_id) or not settings.enable_privacy_gate:
+        return messages, 0
+
+    from androbugger.privacy.gate import get_gate
+    gate = get_gate()
+    total_replacements = 0
+    sanitized = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str) and content:
+            result = gate.sanitize(content, session_id)
+            total_replacements += result.placeholder_count
+            sanitized.append({**msg, "content": result.text})
+        else:
+            sanitized.append(msg)
+    return sanitized, total_replacements
+
+
+def _restore_response(text: str, session_id: str | None, model_id: str) -> str:
+    if not session_id or is_local_provider(model_id) or not settings.enable_privacy_gate:
+        return text
+    from androbugger.privacy.gate import get_gate
+    return get_gate().restore(text, session_id)
 
 
 async def complete(
@@ -29,81 +59,77 @@ async def complete(
     model: str | None = None,
     user_id: str | None = None,
     device_serial: str | None = None,
+    session_id: str | None = None,
 ) -> LLMResponse:
     model_id = _model_str(model)
     start = time.monotonic()
 
-    # Build extra kwargs for Ollama
-    extra: dict = {}
-    if is_local_provider(model_id):
-        extra["api_base"] = settings.ollama_base_url
+    send_messages, pii_count = _sanitize_messages(messages, session_id, model_id)
 
-    try:
+    if pii_count:
+        logger.info("Privacy Gate: %d PII items redacted for cloud call to %s", pii_count, model_id)
+
+    async def _call(mid: str, msgs: list[dict]) -> LLMResponse:
         resp = await litellm.acompletion(
-            model=model_id,
-            messages=messages,
+            model=mid,
+            messages=msgs,
             max_tokens=settings.llm_max_tokens,
-            **extra,
+            **_extra_kwargs(mid),
         )
         elapsed = (time.monotonic() - start) * 1000
         content = resp.choices[0].message.content or ""
+        content = _restore_response(content, session_id, mid)
         usage = resp.usage or {}
-        cost = litellm.completion_cost(completion_response=resp) if not is_local_provider(model_id) else None
+        cost = None
+        try:
+            if not is_local_provider(mid):
+                cost = litellm.completion_cost(completion_response=resp)
+        except Exception:
+            pass
         return LLMResponse(
             content=content,
-            provider=model_id.split("/")[0],
-            model=model_id,
+            provider=mid.split("/")[0],
+            model=mid,
             prompt_tokens=getattr(usage, "prompt_tokens", 0),
             completion_tokens=getattr(usage, "completion_tokens", 0),
             latency_ms=elapsed,
             cost_usd=cost,
         )
+
+    try:
+        return await _call(model_id, send_messages)
     except Exception as exc:
         logger.warning("Primary model %s failed: %s — trying fallback", model_id, exc)
-        # Fallback
         fallback = settings.fallback_llm_model
         if fallback == model_id:
             raise
-        extra_fb: dict = {}
-        if is_local_provider(fallback):
-            extra_fb["api_base"] = settings.ollama_base_url
-        resp = await litellm.acompletion(
-            model=fallback,
-            messages=messages,
-            max_tokens=settings.llm_max_tokens,
-            **extra_fb,
-        )
-        elapsed = (time.monotonic() - start) * 1000
-        content = resp.choices[0].message.content or ""
-        usage = resp.usage or {}
-        return LLMResponse(
-            content=content,
-            provider=fallback.split("/")[0],
-            model=fallback,
-            prompt_tokens=getattr(usage, "prompt_tokens", 0),
-            completion_tokens=getattr(usage, "completion_tokens", 0),
-            latency_ms=elapsed,
-            cost_usd=None,
-        )
+        fb_msgs, _ = _sanitize_messages(messages, session_id, fallback)
+        return await _call(fallback, fb_msgs)
 
 
 async def stream(
     messages: list[dict],
     model: str | None = None,
+    session_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     model_id = _model_str(model)
-    extra: dict = {}
-    if is_local_provider(model_id):
-        extra["api_base"] = settings.ollama_base_url
+    send_messages, _ = _sanitize_messages(messages, session_id, model_id)
 
     response = await litellm.acompletion(
         model=model_id,
-        messages=messages,
+        messages=send_messages,
         max_tokens=settings.llm_max_tokens,
         stream=True,
-        **extra,
+        **_extra_kwargs(model_id),
     )
+
+    buffer = ""
     async for chunk in response:
         delta = chunk.choices[0].delta.content
         if delta:
+            buffer += delta
             yield delta
+
+    # After stream ends, restore PII in the complete buffer would require
+    # re-sending — instead the chat WS stores the buffer and restores placeholders
+    # before persisting to DB. Yielded chunks already contain placeholders for cloud.

@@ -1,0 +1,5 @@
+{
+  "pattern_id": "known_crash_pattern",
+  "detected": true,
+  "confidence": "high"
+}
