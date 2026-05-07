@@ -126,8 +126,8 @@ async def delete_webhook(wid: str, user: Annotated[dict, Depends(require_role("a
 @router.get("/{wid}/deliveries")
 async def list_deliveries(
     wid: str,
+    user: Annotated[dict, Depends(require_role("admin"))],
     limit: int = 50,
-    user: Annotated[dict, Depends(require_role("admin"))] = None,
 ):
     async with get_db() as db:
         rows = await (await db.execute(

@@ -56,11 +56,11 @@ async def search(body: SearchRequest, user: Annotated[dict, Depends(get_current_
 
 @router.get("/entries")
 async def list_entries(
+    user: Annotated[dict, Depends(require_role("technician"))],
     namespace: str | None = None,
     q: str | None = None,
     page: int = 1,
     page_size: int = 20,
-    user: Annotated[dict, Depends(require_role("technician"))] = None,
 ):
     offset = (page - 1) * page_size
     async with get_db() as db:

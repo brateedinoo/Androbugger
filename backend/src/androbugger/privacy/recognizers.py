@@ -43,7 +43,7 @@ class DeviceSerialRecognizer(PatternRecognizer):
 
 
 class ADUsernameRecognizer(PatternRecognizer):
-    """Active Directory domain\username patterns."""
+    r"""Active Directory domain\username patterns."""
     PATTERNS = [
         Pattern("AD_BACKSLASH", r"[A-Z]{2,15}\\[a-z][a-z0-9._]{2,20}", 0.85),
         Pattern("AD_UPN", r"[a-z][a-z0-9.]{2,20}@[a-z]{2,15}\.[a-z]{2,5}", 0.7),

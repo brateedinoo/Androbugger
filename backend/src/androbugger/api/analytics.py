@@ -43,8 +43,8 @@ async def overview(
 
 @router.get("/trends")
 async def trends(
+    user: Annotated[dict, Depends(require_role("developer"))],
     days: int = 30,
-    user: Annotated[dict, Depends(require_role("developer"))] = None,
 ):
     """Daily session counts + failure rate for the last N days."""
     async with get_db() as db:
@@ -74,8 +74,8 @@ async def trends(
 
 @router.get("/failure-patterns")
 async def failure_patterns(
+    user: Annotated[dict, Depends(require_role("developer"))],
     limit: int = 20,
-    user: Annotated[dict, Depends(require_role("developer"))] = None,
 ):
     """Top recurring root-cause patterns across all sessions."""
     async with get_db() as db:
@@ -106,8 +106,8 @@ async def failure_patterns(
 @router.get("/device-health/{serial}")
 async def device_health(
     serial: str,
+    user: Annotated[dict, Depends(require_role("developer"))],
     limit: int = 90,
-    user: Annotated[dict, Depends(require_role("developer"))] = None,
 ):
     """Hardware check history for a specific device."""
     async with get_db() as db:
@@ -129,8 +129,8 @@ async def device_health(
 
 @router.get("/regression-map")
 async def regression_map(
+    user: Annotated[dict, Depends(require_role("developer"))],
     months: int = 6,
-    user: Annotated[dict, Depends(require_role("developer"))] = None,
 ):
     """Month × device failure-rate matrix for regression heat-map."""
     async with get_db() as db:

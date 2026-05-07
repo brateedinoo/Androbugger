@@ -178,6 +178,8 @@ async def _run_daily_retention() -> None:
             async with get_db() as db:
                 for entity, max_days in policies.items():
                     ts_col = _ENTITY_TS_COL[entity]
+                    assert entity in _ENTITY_TS_COL
+                    assert ts_col in {"started_at", "timestamp", "delivered_at", "created_at"}
                     await db.execute(
                         f"DELETE FROM {entity} WHERE {ts_col} < datetime('now', ?)",
                         (f"-{max_days} days",),

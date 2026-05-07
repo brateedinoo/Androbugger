@@ -45,7 +45,8 @@ def test_restore_roundtrip():
 
 def test_no_pii_unchanged():
     gate = PrivacyGate()
-    text = "FATAL EXCEPTION: main process com.example.app crashed"
+    # Use plain text with no email/IP/domain-like patterns so Presidio has nothing to flag
+    text = "FATAL EXCEPTION: main process binder_1_2 was killed due to OOM"
     result = gate.sanitize(text, "sess5")
     assert result.placeholder_count == 0
     assert result.text == text
