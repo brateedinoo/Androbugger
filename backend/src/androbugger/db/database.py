@@ -1,7 +1,8 @@
-import aiosqlite
 from contextlib import asynccontextmanager
-from androbugger.config import settings
 
+import aiosqlite
+
+from androbugger.config import settings
 
 _db_path = str(settings.db_path)
 

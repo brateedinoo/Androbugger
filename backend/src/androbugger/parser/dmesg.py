@@ -1,6 +1,7 @@
 """Kernel log (dmesg) parser."""
 import re
-from androbugger.parser.models import DmesgEntry, ThermalEvent, OOMKill, SELinuxDenial
+
+from androbugger.parser.models import DmesgEntry, OOMKill, SELinuxDenial, ThermalEvent
 
 _LINE_RE = re.compile(r"<(\d+)>\[\s*([\d.]+)\]\s*(.*)")
 _THERMAL_RE = re.compile(

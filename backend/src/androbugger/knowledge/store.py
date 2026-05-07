@@ -1,8 +1,6 @@
 """Hybrid BM25 + vector search store using ChromaDB + tantivy-py with RRF fusion."""
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from pathlib import Path
 

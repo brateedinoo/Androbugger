@@ -1,16 +1,15 @@
 """Admin REST endpoints: users, audit log, system stats."""
 import csv
 import io
-import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from androbugger.auth.middleware import get_current_user, require_role
-from androbugger.auth.users import create_user, get_user_by_id
+from androbugger.auth.middleware import require_role
+from androbugger.auth.users import create_user
 from androbugger.config import settings
 from androbugger.db.database import get_db
 
@@ -33,7 +32,7 @@ async def admin_stats(user: Annotated[dict, Depends(require_role("admin"))]):
                FROM audit_log
                WHERE timestamp >= ?
                GROUP BY day ORDER BY day""",
-            ((datetime.now(timezone.utc) - timedelta(days=7)).isoformat(),),
+            ((datetime.now(UTC) - timedelta(days=7)).isoformat(),),
         )).fetchall()
         providers_row = await (await db.execute(
             "SELECT name, type, enabled FROM llm_providers"
@@ -133,7 +132,7 @@ async def list_audit(
     page: int = 1,
     per_page: int = 50,
 ):
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     conditions = ["timestamp >= ?"]
     params: list = [cutoff]
     if action:
@@ -172,7 +171,7 @@ async def export_audit_csv(
     user: Annotated[dict, Depends(require_role("admin"))],
     days: int = 30,
 ):
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     async with get_db() as db:
         rows = await (await db.execute(
             "SELECT * FROM audit_log WHERE timestamp >= ? ORDER BY timestamp DESC",
@@ -196,7 +195,7 @@ async def export_audit_csv(
 @router.delete("/audit/prune")
 async def prune_audit(user: Annotated[dict, Depends(require_role("admin"))]):
     """Delete audit entries older than the configured retention period."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=settings.audit_retention_days)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=settings.audit_retention_days)).isoformat()
     async with get_db() as db:
         result = await db.execute("DELETE FROM audit_log WHERE timestamp < ?", (cutoff,))
         await db.commit()

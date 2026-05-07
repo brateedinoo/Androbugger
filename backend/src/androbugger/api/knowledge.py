@@ -2,7 +2,7 @@
 import hashlib
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -106,7 +106,7 @@ async def create_entry(
 
     content_hash = hashlib.sha256(body.content.encode()).hexdigest()
     entry_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Write to a temp file for index_document
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
@@ -149,7 +149,7 @@ async def update_entry(
         if user["role"] != "admin" and row["author_id"] != user["id"]:
             raise HTTPException(403, "Cannot edit another user's entry")
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         if body.title is not None:
             await db.execute(
                 "UPDATE knowledge_entries SET title=?, updated_at=? WHERE id=?",
@@ -203,7 +203,7 @@ async def submit_feedback(
         if not row:
             raise HTTPException(404, "Entry not found")
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         # Upsert feedback
         await db.execute(
             "INSERT INTO knowledge_feedback (entry_id, user_id, helpful, created_at)"

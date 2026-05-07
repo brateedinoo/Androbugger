@@ -1,7 +1,7 @@
 """Device management REST endpoints and WebSocket status feed."""
-import json
 import asyncio
-from datetime import datetime, timezone, timedelta
+import json
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -66,7 +66,7 @@ async def device_health(user: Annotated[dict, Depends(get_current_user)]):
     if not serials:
         return {"health": {}}
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    cutoff = (datetime.now(UTC) - timedelta(days=7)).isoformat()
     health: dict[str, dict] = {}
 
     async with get_db() as db:
@@ -127,8 +127,9 @@ async def device_info(serial: str, user: Annotated[dict, Depends(get_current_use
 
 @router.post("/{serial}/hardware-check")
 async def hardware_check(serial: str, user: Annotated[dict, Depends(get_current_user)]):
-    import uuid
     import dataclasses
+    import uuid
+
     from androbugger.device.hardware import run_hardware_check
     from androbugger.parser.hardware_summary import parse_hardware_results
 

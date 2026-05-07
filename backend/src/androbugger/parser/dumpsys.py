@@ -1,6 +1,7 @@
 """Dumpsys section parsers."""
 import re
-from androbugger.parser.models import MemInfo, ProcessMemInfo, BatteryStats, ActivityInfo, GfxInfo
+
+from androbugger.parser.models import ActivityInfo, BatteryStats, GfxInfo, MemInfo, ProcessMemInfo
 
 
 def parse_meminfo(text: str) -> MemInfo:

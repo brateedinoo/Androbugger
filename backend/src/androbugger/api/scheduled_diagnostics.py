@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/scheduled-diagnostics", tags=["scheduled"])
 def _next_run(cron_expr: str) -> str | None:
     try:
         from croniter import croniter
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         c = croniter(cron_expr, now)
         return c.get_next(datetime).isoformat()
     except Exception:
@@ -56,7 +56,7 @@ async def create_schedule(
         raise HTTPException(status_code=422, detail=f"Invalid cron expression: {body.cron_expr}")
 
     schedule_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     async with get_db() as db:
         await db.execute(

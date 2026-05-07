@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 
@@ -42,7 +42,7 @@ def parse_hardware_results(raw: dict[str, str]) -> HardwareSummary:
     return HardwareSummary(
         overall_status=overall,
         subsystems=subsystems,
-        checked_at=datetime.now(timezone.utc).isoformat(),
+        checked_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -109,7 +109,7 @@ def _parse_storage(raw: str) -> SubsystemStatus:
 
     # Parse df output lines like: /dev/block/sda5  10G  9.5G  500M  95% /data
     for m in re.finditer(r"(\S+)\s+\S+\s+\S+\s+\S+\s+(\d+)%\s+(\S+)", raw):
-        device, pct_str, mount = m.group(1), m.group(2), m.group(3)
+        _device, pct_str, mount = m.group(1), m.group(2), m.group(3)
         pct = int(pct_str)
         if pct > max_use_pct:
             max_use_pct = pct

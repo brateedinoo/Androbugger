@@ -1,9 +1,7 @@
 """Diagnostic session endpoints."""
-import asyncio
 import json
 import uuid
-from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -15,14 +13,23 @@ from androbugger.db.database import get_db
 from androbugger.device import adb as adb_module
 from androbugger.device import manager
 from androbugger.knowledge.indexer import index_resolved_diagnosis, search_knowledge
-from androbugger.llm import prompts, router as llm_router
+from androbugger.llm import prompts
+from androbugger.llm import router as llm_router
 from androbugger.llm.verifier import verify_citations
-from androbugger.parser import bugreport as br_parser
 from androbugger.parser import (
     anr as anr_parser,
+)
+from androbugger.parser import bugreport as br_parser
+from androbugger.parser import (
     dmesg as dmesg_parser,
+)
+from androbugger.parser import (
     dumpsys as dumpsys_parser,
+)
+from androbugger.parser import (
     logcat as logcat_parser,
+)
+from androbugger.parser import (
     tombstone as tombstone_parser,
 )
 from androbugger.parser.models import ParsedBugreport
@@ -112,7 +119,10 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
             summary = generate_summary(parsed)
             summary_json = json.dumps({
                 "severity": summary.severity,
-                "top_errors": [{"tag": e.tag, "count": e.count, "level": e.level, "sample_msg": e.sample_msg} for e in summary.top_errors],
+                "top_errors": [
+                    {"tag": e.tag, "count": e.count, "level": e.level, "sample_msg": e.sample_msg}
+                    for e in summary.top_errors
+                ],
                 "tombstone_count": len(summary.tombstones),
                 "anr_count": len(summary.anr_events),
                 "oom_count": len(summary.oom_events),
@@ -122,7 +132,8 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
             })
 
             # 4. Knowledge retrieval — find relevant past cases before LLM call
-            device = manager.get_device(device_serial) if device_serial in {d.serial for d in manager.list_connected()} else None
+            connected_serials = {d.serial for d in manager.list_connected()}
+            device = manager.get_device(device_serial) if device_serial in connected_serials else None
             device_info = device.to_dict() if device else {}
             knowledge_context: list[dict] = []
             try:
@@ -155,15 +166,17 @@ async def _run_diagnosis(session_id: str, device_serial: str, user_id: str) -> N
                     llm_report += "\n\n---\n*Citation warnings: " + "; ".join(verified.warnings[:5]) + "*"
                 llm_provider = llm_resp.model
                 llm_tokens = llm_resp.prompt_tokens + llm_resp.completion_tokens
-                await audit_log("llm_call", "info", user_id=user_id, device_serial=device_serial,
-                                detail={"model": llm_resp.model, "tokens": llm_tokens, "latency_ms": round(llm_resp.latency_ms)})
+                await audit_log(
+                    "llm_call", "info", user_id=user_id, device_serial=device_serial,
+                    detail={"model": llm_resp.model, "tokens": llm_tokens, "latency_ms": round(llm_resp.latency_ms)},
+                )
             except Exception as exc:
                 llm_report = None
                 await audit_log("llm_call_failed", "warning", user_id=user_id, device_serial=device_serial,
                                 detail={"error": str(exc)})
 
             # 6. Store session
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             await db.execute(
                 """UPDATE diagnostic_sessions SET
                    status='completed', completed_at=?, bugreport_path=?,
@@ -213,7 +226,7 @@ async def start_diagnosis(
         raise HTTPException(status_code=404, detail="Device not connected")
 
     session_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     async with get_db() as db:
         await db.execute(
@@ -238,7 +251,7 @@ async def batch_start(
 ):
     """Start diagnosis on multiple devices simultaneously."""
     results = []
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     for serial in body.device_serials[:10]:  # cap at 10 concurrent
         try:
             device = manager.get_device(serial)
@@ -280,7 +293,7 @@ async def compare_firmware(
             )).fetchall()
             sessions = [dict(r) for r in rows]
             total = len(sessions)
-            failed = sum(1 for s in sessions if s["status"] == "failed")
+            _failed = sum(1 for s in sessions if s["status"] == "failed")
             resolved = sum(1 for s in sessions if s["status"] == "resolved")
             root_causes: dict[str, int] = {}
             for s in sessions:
@@ -387,27 +400,27 @@ async def export_session(
 
 def _build_markdown_report(session: dict) -> str:
     lines = [
-        f"# Androbugger Diagnostic Report",
-        f"",
+        "# Androbugger Diagnostic Report",
+        "",
         f"**Session ID:** `{session.get('id', '')}`  ",
         f"**Device:** {session.get('device_model') or 'Unknown'} (`{session.get('device_serial', '')}`)",
         f"**Firmware:** {session.get('firmware_version') or 'Unknown'}  ",
         f"**Status:** {session.get('status', '')}  ",
         f"**Started:** {session.get('started_at', '')}  ",
         f"**Completed:** {session.get('completed_at') or '—'}  ",
-        f"",
+        "",
     ]
     if session.get("root_cause"):
-        lines += [f"## Root Cause", f"", session["root_cause"], f""]
+        lines += ["## Root Cause", "", session["root_cause"], ""]
     if session.get("applied_fix"):
-        lines += [f"## Applied Fix", f"", session["applied_fix"], f""]
+        lines += ["## Applied Fix", "", session["applied_fix"], ""]
     if session.get("resolution_notes"):
-        lines += [f"## Notes", f"", session["resolution_notes"], f""]
+        lines += ["## Notes", "", session["resolution_notes"], ""]
     if session.get("llm_report"):
-        lines += [f"## AI Analysis", f"", session["llm_report"], f""]
+        lines += ["## AI Analysis", "", session["llm_report"], ""]
     if session.get("deterministic_summary"):
-        lines += [f"## Deterministic Summary", f"", f"```json", session["deterministic_summary"], f"```", f""]
-    lines += [f"---", f"*Generated by Androbugger*"]
+        lines += ["## Deterministic Summary", "", "```json", session["deterministic_summary"], "```", ""]
+    lines += ["---", "*Generated by Androbugger*"]
     return "\n".join(lines)
 
 

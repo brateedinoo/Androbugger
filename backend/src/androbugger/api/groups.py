@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from androbugger.auth.middleware import get_current_user, require_role
+from androbugger.auth.middleware import require_role
 from androbugger.db.database import get_db
 
 router = APIRouter(prefix="/api/device-groups", tags=["groups"])
@@ -47,7 +47,7 @@ async def create_group(
     user: Annotated[dict, Depends(require_role("developer"))],
 ):
     group_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     try:
         async with get_db() as db:
             await db.execute(
@@ -83,11 +83,14 @@ async def update_group(
     updates: list[str] = []
     params: list = []
     if body.name is not None:
-        updates.append("name=?"); params.append(body.name)
+        updates.append("name=?")
+        params.append(body.name)
     if body.description is not None:
-        updates.append("description=?"); params.append(body.description)
+        updates.append("description=?")
+        params.append(body.description)
     if body.color is not None:
-        updates.append("color=?"); params.append(body.color)
+        updates.append("color=?")
+        params.append(body.color)
     if not updates:
         raise HTTPException(status_code=422, detail="No fields to update")
     params.append(group_id)
@@ -115,7 +118,7 @@ async def add_members(
     body: AddMembersRequest,
     user: Annotated[dict, Depends(require_role("developer"))],
 ):
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         # Verify group exists
         row = await (await db.execute("SELECT id FROM device_groups WHERE id=?", (group_id,))).fetchone()

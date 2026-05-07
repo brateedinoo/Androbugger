@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -12,8 +12,8 @@ _SEVERITY_ORDER = {"unknown": 0, "pass": 1, "info": 1, "warning": 2, "critical":
 
 async def run_scheduled_diagnostic(ctx: dict, schedule_id: str) -> None:
     """Run a scheduled diagnostic for a single device or all members of a group."""
-    from androbugger.db.database import get_db
     from androbugger.api.notifications import create_notification
+    from androbugger.db.database import get_db
 
     async with get_db() as db:
         row = await (await db.execute(
@@ -26,7 +26,7 @@ async def run_scheduled_diagnostic(ctx: dict, schedule_id: str) -> None:
         return
 
     schedule = dict(row)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Collect target serials
     serials: list[str] = []
@@ -76,11 +76,12 @@ async def run_scheduled_diagnostic(ctx: dict, schedule_id: str) -> None:
 async def _start_scheduled_session(serial: str, user_id: str, template_id: str | None) -> str:
     """Insert a session row and fire the diagnosis background task."""
     import uuid
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from androbugger.db.database import get_db
 
     session_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     async with get_db() as db:
         await db.execute(
@@ -91,8 +92,9 @@ async def _start_scheduled_session(serial: str, user_id: str, template_id: str |
         await db.commit()
 
     try:
-        from androbugger.api.diagnostics import _run_diagnosis
         import asyncio
+
+        from androbugger.api.diagnostics import _run_diagnosis
         asyncio.create_task(_run_diagnosis(session_id, serial, template_id or "default"))
     except Exception as exc:
         logger.error("Failed to start diagnosis task: %s", exc)
@@ -102,8 +104,8 @@ async def _start_scheduled_session(serial: str, user_id: str, template_id: str |
 
 async def check_regression(ctx: dict, session_id: str) -> None:
     """Compare new session severity against last 5 for this device; notify if escalated."""
-    from androbugger.db.database import get_db
     from androbugger.api.notifications import create_notification
+    from androbugger.db.database import get_db
 
     async with get_db() as db:
         current = await (await db.execute(

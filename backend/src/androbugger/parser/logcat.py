@@ -1,6 +1,7 @@
 """Logcat line parser — threadtime format."""
 import re
 from collections import defaultdict
+
 from androbugger.parser.models import LogcatEntry
 
 # MM-DD HH:MM:SS.mmm  PID  TID LEVEL TAG  : MSG

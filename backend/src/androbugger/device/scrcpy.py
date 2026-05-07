@@ -9,7 +9,7 @@ from collections.abc import Callable
 logger = logging.getLogger(__name__)
 
 # Module-level registry: one manager per serial
-_managers: dict[str, "ScrcpyManager"] = {}
+_managers: dict[str, ScrcpyManager] = {}
 _managers_lock = asyncio.Lock()
 
 

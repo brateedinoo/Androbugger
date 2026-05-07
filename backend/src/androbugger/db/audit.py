@@ -1,8 +1,6 @@
 """Append-only audit log helper."""
 import json
-from datetime import datetime, timezone
-
-import aiosqlite
+from datetime import UTC, datetime
 
 from androbugger.db.database import get_db
 
@@ -15,7 +13,7 @@ async def log(
     detail: dict | None = None,
     ip_address: str | None = None,
 ) -> None:
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(UTC).isoformat()
     async with get_db() as db:
         await db.execute(
             """INSERT INTO audit_log (timestamp, user_id, action, severity, device_serial, detail, ip_address)

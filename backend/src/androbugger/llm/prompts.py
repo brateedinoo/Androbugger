@@ -1,9 +1,6 @@
 """Prompt templates for Android diagnostic analysis."""
-import json
-from dataclasses import asdict
 
 from androbugger.parser.models import DiagnosticSummary
-
 
 DIAGNOSTIC_SYSTEM_PROMPT = """\
 You are an expert Android system engineer specializing in diagnosing failures in Android-based \

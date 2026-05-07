@@ -1,16 +1,14 @@
 """ADB wrapper with permission-tier enforcement and audit logging."""
 import asyncio
 import fnmatch
-import json
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import AsyncGenerator
 
 import adbutils
 
 from androbugger.config import settings
-
 
 PermissionTier = str  # 'read_only' | 'state_changing' | 'destructive'
 
@@ -71,7 +69,7 @@ async def pull_bugreport(serial: str) -> Path:
     """Pull a bugreport from the device and return the local zip path."""
     dest_dir = settings.bugreport_dir
     dest_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     dest = dest_dir / f"bugreport_{serial}_{ts}.zip"
 
     loop = asyncio.get_event_loop()

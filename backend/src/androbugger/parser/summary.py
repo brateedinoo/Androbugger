@@ -1,6 +1,5 @@
 """Deterministic diagnostic summary generator — no LLM involved."""
 from collections import Counter
-from datetime import datetime, timezone
 
 from androbugger.parser.models import (
     CrashLoop,

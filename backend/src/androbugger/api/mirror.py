@@ -35,7 +35,7 @@ async def ws_mirror(serial: str, websocket: WebSocket) -> None:
             # Send the next frame as a binary message
             frame = await asyncio.wait_for(queue.get(), timeout=10.0)
             await websocket.send_bytes(frame)
-    except (WebSocketDisconnect, asyncio.TimeoutError):
+    except (TimeoutError, WebSocketDisconnect):
         pass
     except Exception:
         pass

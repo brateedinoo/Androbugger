@@ -1,11 +1,11 @@
 """Webhook endpoint management and delivery history."""
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 from androbugger.auth.middleware import require_role
 from androbugger.db.database import get_db
@@ -55,7 +55,7 @@ async def create_webhook(
         raise HTTPException(400, f"Unknown events: {invalid}")
 
     wid = str(uuid.uuid4())
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     async with get_db() as db:
         await db.execute(
             "INSERT INTO webhook_endpoints (id, name, url, secret, events, enabled, created_by, created_at)"
