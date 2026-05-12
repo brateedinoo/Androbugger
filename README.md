@@ -51,39 +51,65 @@ by default.
   `docker-compose.yml`.
 - ~10 GB of free disk space for the default Ollama models.
 
-### Steps
+### Guided setup (recommended)
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/brateedinoo/androbugger.git
 cd androbugger
-
-# 2. Create your environment file
-cp .env.default .env
+./scripts/setup.sh
 ```
 
-Open `.env` and set at minimum:
+The script checks prerequisites, generates a secure `SECRET_KEY`, asks how you want to
+configure the LLM (local Ollama or cloud), and asks whether to deploy via `docker compose`
+on this machine or to print a ready-to-paste env block for Portainer / another Docker GUI.
 
-```env
-SECRET_KEY=<long-random-string>   # used to sign JWT tokens — keep this secret
-```
+Once the stack is up, open **http://localhost** and log in with **admin / admin**. You will
+immediately be prompted to set a new password — do so before doing anything else.
+
+<details>
+<summary><strong>Manual setup</strong> (if you'd rather do it by hand)</summary>
 
 ```bash
-# 3. Build and start all services
+cp .env.default .env
+# Edit .env and set SECRET_KEY to a long random string (openssl rand -hex 32)
 docker compose up -d
-
-# 4. Download the LLM models (one-time, ~8 GB total)
 docker compose exec ollama ollama pull qwen3:14b
 docker compose exec ollama ollama pull nomic-embed-text
-
-# 5. Check everything is healthy
 docker compose ps
 ```
 
-Open **http://localhost** in your browser.
+</details>
 
-Log in with **admin / admin**. You will immediately be prompted to set a new password — do so
-before doing anything else.
+<details>
+<summary><strong>Portainer GUI deployment</strong></summary>
+
+If you manage Docker through Portainer, deploy Androbugger as a Stack:
+
+1. **Generate the env block.** On any machine with `bash` and `openssl`, clone the repo and
+   run `./scripts/setup.sh`. When asked, choose **"Portainer or another Docker GUI"**. The
+   script prints (and optionally saves to `portainer-env.txt`) a ready-to-paste env block
+   including a freshly generated `SECRET_KEY`. *(Or, generate manually:
+   `openssl rand -hex 32` and copy the relevant variables from `.env.default`.)*
+
+2. **Create the stack in Portainer.**
+   - Portainer → **Stacks** → **Add stack**.
+   - Build method: **Repository** (point at the Androbugger Git repo and
+     `docker-compose.yml`), or **Upload** the `docker-compose.yml` from your local clone.
+   - Under **Environment variables**, paste the block from step 1.
+   - Click **Deploy the stack**.
+
+3. **Pull the Ollama models.** Once the stack is running, open the `ollama` container in
+   Portainer → **Console** (`/bin/sh`) and run:
+
+   ```
+   ollama pull qwen3:14b
+   ollama pull nomic-embed-text
+   ```
+
+4. **Open the app.** Visit the host's port 80 (or whatever you mapped Caddy to) and log in
+   as `admin` / `admin`.
+
+</details>
 
 ### Connecting a device
 

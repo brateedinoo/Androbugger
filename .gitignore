@@ -8,5 +8,6 @@ build/
 .env
 .env.*
 !.env.default
+portainer-env.txt
 node_modules/
 *.log
