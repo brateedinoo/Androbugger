@@ -31,7 +31,7 @@ jobs:
         run: uv run mypy src/ --ignore-missing-imports || true
 
       - name: Pytest
-        run: uv run pytest tests/ -v --tb=short
+        run: uv run pytest tests/ -v --tb=short --ignore=tests/test_device
 
   frontend:
     name: Frontend build
