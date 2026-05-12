@@ -1,10 +1,12 @@
 """Admin REST endpoints: users, audit log, system stats."""
 import csv
 import io
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -35,7 +37,7 @@ async def admin_stats(user: Annotated[dict, Depends(require_role("admin"))]):
             ((datetime.now(UTC) - timedelta(days=7)).isoformat(),),
         )).fetchall()
         providers_row = await (await db.execute(
-            "SELECT name, type, enabled FROM llm_providers"
+            "SELECT provider_type, model_name, is_enabled FROM llm_providers"
         )).fetchall()
 
     return {
@@ -204,8 +206,52 @@ async def prune_audit(user: Annotated[dict, Depends(require_role("admin"))]):
 
 # ── LLM providers ──────────────────────────────────────────────────────────────
 
+_CLOUD_MODELS: dict[str, list[str]] = {
+    "anthropic": [
+        "anthropic/claude-opus-4-7",
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-haiku-4-5-20251001",
+    ],
+    "openai": ["openai/gpt-4o", "openai/gpt-4o-mini", "openai/o1", "openai/o3-mini"],
+}
+
+
+async def _fetch_provider_models(provider_type: str, endpoint_url: str) -> dict:
+    if provider_type in _CLOUD_MODELS:
+        return {"models": _CLOUD_MODELS[provider_type]}
+    if not endpoint_url:
+        return {"models": [], "error": "No endpoint URL configured"}
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{endpoint_url.rstrip('/')}/api/tags")
+            resp.raise_for_status()
+            data = resp.json()
+            models = sorted(m["name"] for m in data.get("models", []))
+            return {"models": models}
+    except Exception as exc:
+        return {"models": [], "error": f"Could not reach {endpoint_url}: {exc}"}
+
+
 class UpdateProviderRequest(BaseModel):
-    enabled: bool
+    enabled: bool | None = None
+    endpoint_url: str | None = None
+    model_name: str | None = None
+    max_tokens: int | None = None
+    is_default: bool | None = None
+
+
+class CreateProviderRequest(BaseModel):
+    provider_type: str
+    model_name: str
+    endpoint_url: str | None = None
+    is_local: bool = True
+    max_tokens: int = 4096
+
+
+async def _reload_provider_cache(db) -> None:
+    from androbugger.llm import router as llm_router
+    rows = await (await db.execute("SELECT * FROM llm_providers")).fetchall()
+    llm_router.refresh_provider_cache([dict(r) for r in rows])
 
 
 @router.get("/llm-providers")
@@ -215,6 +261,50 @@ async def list_llm_providers(user: Annotated[dict, Depends(require_role("admin")
     return {"providers": [dict(r) for r in rows]}
 
 
+@router.get("/llm-provider-models")
+async def preview_provider_models(
+    provider_type: str = Query(...),
+    endpoint_url: str = Query(""),
+    user: Annotated[dict, Depends(require_role("admin"))] = None,
+):
+    return await _fetch_provider_models(provider_type, endpoint_url)
+
+
+@router.get("/llm-providers/{provider_id}/models")
+async def get_provider_models(
+    provider_id: str,
+    endpoint_url_override: str | None = Query(None),
+    user: Annotated[dict, Depends(require_role("admin"))] = None,
+):
+    async with get_db() as db:
+        row = await (await db.execute(
+            "SELECT * FROM llm_providers WHERE id=?", (provider_id,)
+        )).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    p = dict(row)
+    endpoint_url = endpoint_url_override if endpoint_url_override is not None else (p.get("endpoint_url") or "")
+    return await _fetch_provider_models(p["provider_type"], endpoint_url)
+
+
+@router.post("/llm-providers")
+async def create_llm_provider(
+    body: CreateProviderRequest,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    provider_id = str(uuid.uuid4())
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO llm_providers
+               (id, provider_type, model_name, endpoint_url, is_local, is_default, is_enabled, priority, max_tokens)
+               VALUES (?, ?, ?, ?, ?, FALSE, TRUE, 0, ?)""",
+            (provider_id, body.provider_type, body.model_name, body.endpoint_url, body.is_local, body.max_tokens),
+        )
+        await db.commit()
+        await _reload_provider_cache(db)
+    return {"id": provider_id, "ok": True}
+
+
 @router.patch("/llm-providers/{provider_id}")
 async def update_llm_provider(
     provider_id: str,
@@ -222,12 +312,54 @@ async def update_llm_provider(
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
     async with get_db() as db:
-        result = await db.execute(
-            "UPDATE llm_providers SET enabled=? WHERE id=?", (body.enabled, provider_id)
-        )
+        row = await (await db.execute(
+            "SELECT id FROM llm_providers WHERE id=?", (provider_id,)
+        )).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Provider not found")
+
+        updates: list[str] = []
+        params: list = []
+
+        if body.enabled is not None:
+            updates.append("is_enabled=?")
+            params.append(body.enabled)
+        if body.endpoint_url is not None:
+            updates.append("endpoint_url=?")
+            params.append(body.endpoint_url)
+        if body.model_name is not None:
+            updates.append("model_name=?")
+            params.append(body.model_name)
+        if body.max_tokens is not None:
+            updates.append("max_tokens=?")
+            params.append(body.max_tokens)
+        if body.is_default is True:
+            await db.execute("UPDATE llm_providers SET is_default=FALSE")
+            updates.append("is_default=?")
+            params.append(True)
+
+        if updates:
+            params.append(provider_id)
+            await db.execute(f"UPDATE llm_providers SET {', '.join(updates)} WHERE id=?", params)
+        await db.commit()
+        await _reload_provider_cache(db)
+    return {"ok": True}
+
+
+@router.delete("/llm-providers/{provider_id}")
+async def delete_llm_provider(
+    provider_id: str,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    async with get_db() as db:
+        count_row = await (await db.execute("SELECT COUNT(*) FROM llm_providers")).fetchone()
+        if count_row[0] <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the only remaining provider")
+        result = await db.execute("DELETE FROM llm_providers WHERE id=?", (provider_id,))
         await db.commit()
         if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Provider not found")
+        await _reload_provider_cache(db)
     return {"ok": True}
 
 

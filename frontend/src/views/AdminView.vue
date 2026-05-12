@@ -189,23 +189,143 @@
 
         <!-- LLM providers tab -->
         <div v-if="activeTab === 'llm'" class="space-y-5 max-w-2xl">
-          <h2 class="text-base font-semibold">LLM Providers</h2>
+          <div class="flex items-center justify-between">
+            <h2 class="text-base font-semibold">LLM Providers</h2>
+            <button @click="showAddProvider = !showAddProvider"
+              class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition">
+              + Add Provider
+            </button>
+          </div>
+
+          <!-- Add provider form -->
+          <div v-if="showAddProvider" class="bg-[#161925] border border-blue-700 rounded-xl p-5 space-y-4">
+            <h3 class="text-sm font-medium text-slate-300">New Provider</h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">Type</label>
+                <select v-model="newProvider.provider_type"
+                  @change="newProvider.is_local = ['ollama','vllm'].includes(newProvider.provider_type); newProviderModels = []; newProvider.model_name = ''"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                  <option value="ollama">Ollama</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="vllm">vLLM</option>
+                </select>
+              </div>
+              <div v-if="newProvider.is_local">
+                <label class="text-xs text-slate-500 mb-1 block">Endpoint URL</label>
+                <input v-model="newProvider.endpoint_url" placeholder="http://192.168.1.50:11434"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500 mb-1 block">Model</label>
+              <div class="flex gap-2">
+                <select v-if="newProviderModels.length" v-model="newProvider.model_name"
+                  class="flex-1 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                  <option v-for="m in newProviderModels" :key="m" :value="m">{{ m }}</option>
+                </select>
+                <input v-else v-model="newProvider.model_name"
+                  :placeholder="newProviderModelsLoading ? 'Loading…' : 'e.g. qwen3:14b'"
+                  :disabled="newProviderModelsLoading"
+                  class="flex-1 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50" />
+                <button @click="fetchNewProviderModels" :disabled="newProviderModelsLoading"
+                  class="px-3 py-2 rounded-lg bg-[#1e2130] border border-[#2a2d3e] text-slate-400 text-xs hover:border-blue-500 disabled:opacity-50 transition whitespace-nowrap">
+                  {{ newProviderModelsLoading ? '…' : 'Fetch models' }}
+                </button>
+              </div>
+              <p v-if="newProviderModelsError" class="text-amber-400 text-xs mt-1">{{ newProviderModelsError }}</p>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
+              <input v-model.number="newProvider.max_tokens" type="number" min="256" max="200000"
+                class="w-32 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div class="flex gap-2">
+              <button @click="addProvider" :disabled="!newProvider.model_name || providerSaving"
+                class="px-4 py-2 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm transition">
+                {{ providerSaving ? 'Adding…' : 'Add Provider' }}
+              </button>
+              <button @click="showAddProvider = false"
+                class="px-4 py-2 rounded-lg border border-[#2a2d3e] text-slate-400 text-sm hover:text-slate-200 transition">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <!-- Provider cards -->
           <div class="space-y-3">
             <div v-for="p in providers" :key="p.id"
-              class="bg-[#161925] border border-[#2a2d3e] rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <p class="font-medium text-sm">{{ p.name }}</p>
-                <p class="text-slate-500 text-xs mt-0.5">{{ p.type }}</p>
-              </div>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <span class="text-xs text-slate-400">{{ p.enabled ? 'Enabled' : 'Disabled' }}</span>
-                <div @click="toggleProvider(p)"
-                  :class="['w-10 h-5 rounded-full transition-colors relative cursor-pointer',
-                    p.enabled ? 'bg-blue-600' : 'bg-[#2a2d3e]']">
-                  <div :class="['w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform',
-                    p.enabled ? 'translate-x-5' : 'translate-x-0.5']" />
+              class="bg-[#161925] border border-[#2a2d3e] rounded-xl overflow-hidden">
+              <!-- Card header -->
+              <div class="p-4 flex items-center gap-3 cursor-pointer select-none" @click="toggleExpand(p.id)">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium text-sm capitalize">{{ p.provider_type }}</span>
+                    <span v-if="p.is_default" class="px-1.5 py-0.5 rounded text-[10px] bg-yellow-900 text-yellow-300">Default</span>
+                    <span class="text-slate-500 text-xs truncate">{{ p.model_name }}</span>
+                  </div>
+                  <p v-if="p.endpoint_url && p.is_local" class="text-slate-600 text-xs mt-0.5 truncate">{{ p.endpoint_url }}</p>
                 </div>
-              </label>
+                <div class="flex items-center gap-3 flex-shrink-0">
+                  <div @click.stop="toggleProviderEnabled(p)"
+                    :class="['w-10 h-5 rounded-full transition-colors relative cursor-pointer',
+                      p.is_enabled ? 'bg-blue-600' : 'bg-[#2a2d3e]']">
+                    <div :class="['w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform',
+                      p.is_enabled ? 'translate-x-5' : 'translate-x-0.5']" />
+                  </div>
+                  <span class="text-slate-600 text-xs w-2">{{ expandedProvider === p.id ? '▲' : '▼' }}</span>
+                </div>
+              </div>
+
+              <!-- Expanded edit form -->
+              <div v-if="expandedProvider === p.id" class="border-t border-[#2a2d3e] p-4 space-y-4">
+                <div v-if="p.is_local">
+                  <label class="text-xs text-slate-500 mb-1 block">Endpoint URL</label>
+                  <input v-model="providerEdits[p.id].endpoint_url"
+                    placeholder="http://ollama:11434"
+                    @blur="onEndpointBlur(p)"
+                    class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">Model</label>
+                  <div class="flex gap-2">
+                    <select v-if="providerModels[p.id]?.length" v-model="providerEdits[p.id].model_name"
+                      class="flex-1 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500">
+                      <option v-for="m in providerModels[p.id]" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                    <input v-else v-model="providerEdits[p.id].model_name"
+                      :placeholder="providerModelsLoading[p.id] ? 'Loading models…' : 'Model name'"
+                      :disabled="!!providerModelsLoading[p.id]"
+                      class="flex-1 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500 disabled:opacity-50" />
+                    <button @click="loadProviderModels(p)" :disabled="!!providerModelsLoading[p.id]"
+                      class="px-3 py-2 rounded-lg bg-[#1e2130] border border-[#2a2d3e] text-slate-400 text-xs hover:border-blue-500 disabled:opacity-50 transition whitespace-nowrap">
+                      {{ providerModelsLoading[p.id] ? '…' : '↻ Refresh' }}
+                    </button>
+                  </div>
+                  <p v-if="providerModelsError[p.id]" class="text-amber-400 text-xs mt-1">{{ providerModelsError[p.id] }}</p>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
+                  <input v-model.number="providerEdits[p.id].max_tokens" type="number" min="256" max="200000"
+                    class="w-32 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+                <div class="flex gap-2 flex-wrap items-center">
+                  <button @click="saveProvider(p)" :disabled="providerSaving"
+                    class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm transition">
+                    {{ providerSaving ? 'Saving…' : 'Save' }}
+                  </button>
+                  <button v-if="!p.is_default" @click="setDefault(p)" :disabled="providerSaving"
+                    class="px-4 py-2 rounded-lg border border-yellow-700 text-yellow-400 hover:bg-yellow-900/30 disabled:opacity-50 text-sm transition">
+                    Set as default
+                  </button>
+                  <button v-if="!p.is_default" @click="deleteProvider(p)"
+                    class="px-4 py-2 rounded-lg border border-red-800 text-red-400 hover:bg-red-900/30 text-sm transition ml-auto">
+                    Delete
+                  </button>
+                </div>
+                <p v-if="providerSaveError" class="text-red-400 text-xs">{{ providerSaveError }}</p>
+              </div>
             </div>
             <p v-if="!providers.length" class="text-slate-500 text-sm">No providers configured</p>
           </div>
@@ -631,6 +751,18 @@ function severityBadge(s: string) {
 
 // ── LLM Providers ──────────────────────────────────────────────────────
 const providers = ref<any[]>([])
+const expandedProvider = ref<string | null>(null)
+const providerEdits = ref<Record<string, any>>({})
+const providerModels = ref<Record<string, string[]>>({})
+const providerModelsLoading = ref<Record<string, boolean>>({})
+const providerModelsError = ref<Record<string, string>>({})
+const providerSaving = ref(false)
+const providerSaveError = ref('')
+const showAddProvider = ref(false)
+const newProvider = ref({ provider_type: 'ollama', model_name: '', endpoint_url: 'http://ollama:11434', is_local: true, max_tokens: 4096 })
+const newProviderModels = ref<string[]>([])
+const newProviderModelsLoading = ref(false)
+const newProviderModelsError = ref('')
 
 async function loadProviders() {
   try {
@@ -639,15 +771,128 @@ async function loadProviders() {
   } catch { /* ignore */ }
 }
 
-async function toggleProvider(p: any) {
+function toggleExpand(id: string) {
+  if (expandedProvider.value === id) { expandedProvider.value = null; return }
+  expandedProvider.value = id
+  const p = providers.value.find(x => x.id === id)
+  if (p) {
+    providerEdits.value[id] = {
+      endpoint_url: p.endpoint_url || '',
+      model_name: p.model_name || '',
+      max_tokens: p.max_tokens || 4096,
+    }
+    loadProviderModels(p)
+  }
+}
+
+async function loadProviderModels(p: any, endpointOverride?: string) {
+  providerModelsLoading.value[p.id] = true
+  providerModelsError.value[p.id] = ''
+  try {
+    const params = new URLSearchParams()
+    const override = endpointOverride ?? providerEdits.value[p.id]?.endpoint_url
+    if (override) params.set('endpoint_url_override', override)
+    const data = await $fetch(`/api/admin/llm-providers/${p.id}/models?${params}`, { headers: auth.authHeaders() })
+    providerModels.value[p.id] = data.models || []
+    if (data.error) providerModelsError.value[p.id] = data.error
+  } catch {
+    providerModelsError.value[p.id] = 'Could not fetch models'
+  } finally {
+    providerModelsLoading.value[p.id] = false
+  }
+}
+
+let _endpointDebounce: ReturnType<typeof setTimeout> | null = null
+function onEndpointBlur(p: any) {
+  if (_endpointDebounce) clearTimeout(_endpointDebounce)
+  _endpointDebounce = setTimeout(() => loadProviderModels(p, providerEdits.value[p.id]?.endpoint_url), 300)
+}
+
+async function toggleProviderEnabled(p: any) {
   try {
     await $fetch(`/api/admin/llm-providers/${p.id}`, {
+      method: 'PATCH', body: { enabled: !p.is_enabled }, headers: auth.authHeaders(),
+    })
+    p.is_enabled = !p.is_enabled
+  } catch { /* ignore */ }
+}
+
+async function saveProvider(p: any) {
+  providerSaving.value = true
+  providerSaveError.value = ''
+  try {
+    const edit = providerEdits.value[p.id]
+    await $fetch(`/api/admin/llm-providers/${p.id}`, {
       method: 'PATCH',
-      body: { enabled: !p.enabled },
+      body: { endpoint_url: edit.endpoint_url || null, model_name: edit.model_name, max_tokens: edit.max_tokens },
       headers: auth.authHeaders(),
     })
-    p.enabled = !p.enabled
-  } catch { /* ignore */ }
+    Object.assign(p, { endpoint_url: edit.endpoint_url, model_name: edit.model_name, max_tokens: edit.max_tokens })
+    expandedProvider.value = null
+  } catch (e: any) {
+    providerSaveError.value = e?.data?.detail || 'Save failed'
+  } finally { providerSaving.value = false }
+}
+
+async function setDefault(p: any) {
+  providerSaving.value = true
+  try {
+    await $fetch(`/api/admin/llm-providers/${p.id}`, {
+      method: 'PATCH', body: { is_default: true }, headers: auth.authHeaders(),
+    })
+    await loadProviders()
+    expandedProvider.value = null
+  } catch { /* ignore */ } finally { providerSaving.value = false }
+}
+
+async function deleteProvider(p: any) {
+  if (!confirm(`Delete provider "${p.provider_type} / ${p.model_name}"?`)) return
+  try {
+    await $fetch(`/api/admin/llm-providers/${p.id}`, { method: 'DELETE', headers: auth.authHeaders() })
+    providers.value = providers.value.filter(x => x.id !== p.id)
+    if (expandedProvider.value === p.id) expandedProvider.value = null
+  } catch (e: any) { alert(e?.data?.detail || 'Delete failed') }
+}
+
+async function fetchNewProviderModels() {
+  newProviderModelsLoading.value = true
+  newProviderModelsError.value = ''
+  newProviderModels.value = []
+  try {
+    const params = new URLSearchParams({
+      provider_type: newProvider.value.provider_type,
+      endpoint_url: newProvider.value.endpoint_url || '',
+    })
+    const data = await $fetch(`/api/admin/llm-provider-models?${params}`, { headers: auth.authHeaders() })
+    newProviderModels.value = data.models || []
+    if (data.error) newProviderModelsError.value = data.error
+    if (data.models?.length && !newProvider.value.model_name) newProvider.value.model_name = data.models[0]
+  } catch { newProviderModelsError.value = 'Could not fetch models' } finally {
+    newProviderModelsLoading.value = false
+  }
+}
+
+async function addProvider() {
+  providerSaving.value = true
+  try {
+    await $fetch('/api/admin/llm-providers', {
+      method: 'POST',
+      body: {
+        provider_type: newProvider.value.provider_type,
+        model_name: newProvider.value.model_name,
+        endpoint_url: newProvider.value.endpoint_url || null,
+        is_local: newProvider.value.is_local,
+        max_tokens: newProvider.value.max_tokens,
+      },
+      headers: auth.authHeaders(),
+    })
+    await loadProviders()
+    showAddProvider.value = false
+    newProvider.value = { provider_type: 'ollama', model_name: '', endpoint_url: 'http://ollama:11434', is_local: true, max_tokens: 4096 }
+    newProviderModels.value = []
+  } catch (e: any) { alert(e?.data?.detail || 'Add failed') } finally {
+    providerSaving.value = false
+  }
 }
 
 // ── Fine-Tuning ────────────────────────────────────────────────────────
