@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function authHeaders() {
+  function authHeaders(): Record<string, string> {
     return token.value ? { Authorization: `Bearer ${token.value}` } : {}
   }
 

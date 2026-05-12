@@ -275,7 +275,7 @@ const unreadCount = ref(0)
 const deviceGroups = ref<any[]>([])
 let notifWs: WebSocket | null = null
 
-const views = [
+const views: { id: 'none' | 'firmware' | 'group'; label: string }[] = [
   { id: 'none', label: 'All Devices' },
   { id: 'firmware', label: 'Firmware' },
   { id: 'group', label: 'Group' },

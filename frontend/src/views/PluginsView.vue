@@ -239,7 +239,7 @@ interface Plugin {
 
 const auth = useAuthStore()
 const activeTab = ref<'installed' | 'marketplace'>('installed')
-const tabs = [
+const tabs: { id: 'installed' | 'marketplace'; label: string }[] = [
   { id: 'installed', label: 'Installed' },
   { id: 'marketplace', label: 'Marketplace' },
 ]
