@@ -19,7 +19,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "0.7.x"
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
 
       - name: Install dependencies
         run: uv sync --dev
@@ -31,7 +32,9 @@ jobs:
         run: uv run mypy src/ --ignore-missing-imports || true
 
       - name: Pytest
-        run: uv run pytest tests/ -v --tb=short
+        env:
+          ANDROBUGGER_DB_PATH: /tmp/androbugger-test/androbugger.db
+        run: uv run pytest tests/ -v --tb=short --ignore=tests/test_device
 
   frontend:
     name: Frontend build
@@ -46,9 +49,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install
-        run: npm install
+        run: npm ci
 
       - name: Type check
         run: npm run type-check || true

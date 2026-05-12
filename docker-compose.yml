@@ -60,9 +60,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
     depends_on:
       - backend
       - frontend
@@ -80,3 +82,18 @@ volumes:
 networks:
   androbugger:
     driver: bridge
+
+configs:
+  caddyfile:
+    content: |
+      :80 {
+          handle /ws/* {
+              reverse_proxy backend:8000
+          }
+          handle /api/* {
+              reverse_proxy backend:8000
+          }
+          handle {
+              reverse_proxy frontend:80
+          }
+      }
