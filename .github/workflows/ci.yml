@@ -32,6 +32,8 @@ jobs:
         run: uv run mypy src/ --ignore-missing-imports || true
 
       - name: Pytest
+        env:
+          ANDROBUGGER_DB_PATH: /tmp/androbugger-test/androbugger.db
         run: uv run pytest tests/ -v --tb=short --ignore=tests/test_device
 
   frontend:
