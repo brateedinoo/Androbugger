@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from argon2 import PasswordHasher
 
+from androbugger.config import settings
 from androbugger.db.database import get_db
 
 
@@ -13,10 +14,17 @@ async def seed_defaults() -> None:
         # Default admin user
         row = await (await db.execute("SELECT id FROM users WHERE username='admin'")).fetchone()
         if not row:
+            initial_pw = settings.admin_password or "admin"
             await db.execute(
                 """INSERT INTO users (id, username, password_hash, role, force_password_change, created_at)
                    VALUES (?, 'admin', ?, 'admin', TRUE, ?)""",
-                (str(uuid.uuid4()), ph.hash("admin"), datetime.now(UTC).isoformat()),
+                (str(uuid.uuid4()), ph.hash(initial_pw), datetime.now(UTC).isoformat()),
+            )
+        elif settings.admin_password:
+            # Reset admin password when ANDROBUGGER_ADMIN_PASSWORD env var is explicitly set
+            await db.execute(
+                "UPDATE users SET password_hash=?, force_password_change=TRUE WHERE username='admin'",
+                (ph.hash(settings.admin_password),),
             )
 
         # Default LLM provider (Ollama)

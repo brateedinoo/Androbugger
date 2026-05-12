@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-me-in-production-use-a-long-random-string"
     access_token_expire_hours: int = 8
     refresh_token_expire_hours: int = 24
+    admin_password: str = ""  # If set, resets the admin user's password on every startup
 
     # Redis (arq)
     redis_url: str = "redis://redis:6379"

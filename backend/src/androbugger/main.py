@@ -66,8 +66,11 @@ async def lifespan(app: FastAPI):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await proc.communicate()
+        await asyncio.wait_for(proc.communicate(), timeout=10.0)
         logger.info("ADB server started (exit %s)", proc.returncode)
+    except asyncio.TimeoutError:
+        proc.kill()
+        logger.warning("adb start-server timed out after 10s")
     except FileNotFoundError:
         logger.warning("adb binary not found — USB device features unavailable")
 
