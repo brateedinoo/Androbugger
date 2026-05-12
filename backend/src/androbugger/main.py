@@ -50,11 +50,26 @@ async def lifespan(app: FastAPI):
     await seed_defaults()
     logger.info("Database initialised")
 
-    # Load permission tiers from DB
+    # Load permission tiers and provider endpoint cache from DB
     from androbugger.db.database import get_db
+    from androbugger.llm import router as llm_router
     async with get_db() as db:
         rows = await (await db.execute("SELECT * FROM command_permissions")).fetchall()
         adb_module.load_permission_tiers([dict(r) for r in rows])
+        provider_rows = await (await db.execute("SELECT * FROM llm_providers")).fetchall()
+        llm_router.refresh_provider_cache([dict(r) for r in provider_rows])
+
+    # ADB server pre-flight — surfaces USB/daemon issues in startup logs
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "adb", "start-server",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+        logger.info("ADB server started (exit %s)", proc.returncode)
+    except FileNotFoundError:
+        logger.warning("adb binary not found — USB device features unavailable")
 
     # Load plugins
     from androbugger.plugins.loader import load_all_plugins

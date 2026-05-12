@@ -12,6 +12,18 @@ logger = logging.getLogger(__name__)
 
 litellm.set_verbose = False
 
+# Cache of provider_type → endpoint_url, loaded from DB on startup and refreshed on admin changes.
+_provider_endpoint_cache: dict[str, str] = {}
+
+
+def refresh_provider_cache(providers: list[dict]) -> None:
+    global _provider_endpoint_cache
+    _provider_endpoint_cache = {
+        p["provider_type"]: p["endpoint_url"]
+        for p in providers
+        if p.get("endpoint_url") and p.get("is_enabled")
+    }
+
 
 def _model_str(model: str | None) -> str:
     return model if model else settings.default_llm_model
@@ -22,7 +34,11 @@ def is_local_provider(model: str) -> bool:
 
 
 def _extra_kwargs(model_id: str) -> dict:
-    return {"api_base": settings.ollama_base_url} if is_local_provider(model_id) else {}
+    if not is_local_provider(model_id):
+        return {}
+    provider_type = model_id.split("/")[0]
+    base_url = _provider_endpoint_cache.get(provider_type) or settings.ollama_base_url
+    return {"api_base": base_url}
 
 
 def _sanitize_messages(messages: list[dict], session_id: str | None, model_id: str) -> tuple[list[dict], int]:
