@@ -1,6 +1,7 @@
 """ADB wrapper with permission-tier enforcement and audit logging."""
 import asyncio
 import fnmatch
+import subprocess
 import tempfile
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -46,28 +47,46 @@ async def shell(serial: str, command: list[str]) -> str:
 
 async def shell_stream(serial: str, command: list[str]) -> AsyncGenerator[str, None]:
     """Stream output from a long-running ADB shell command line by line."""
-    dev = _get_adb_device(serial)
     loop = asyncio.get_event_loop()
     _DONE = object()
     queue: asyncio.Queue = asyncio.Queue()
+    proc: subprocess.Popen | None = None
 
     def _run():
+        nonlocal proc
         try:
-            for line in dev.shell(" ".join(command), stream=True):
+            proc = subprocess.Popen(
+                ["adb", "-s", serial, "shell"] + command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=1,
+            )
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                 loop.call_soon_threadsafe(queue.put_nowait, line)
+            proc.wait()
+            if proc.returncode != 0:
+                assert proc.stderr is not None
+                err = proc.stderr.read().decode("utf-8", errors="replace").strip()
+                raise RuntimeError(err or f"adb exited with code {proc.returncode}")
         except Exception as exc:
             loop.call_soon_threadsafe(queue.put_nowait, exc)
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
     asyncio.get_event_loop().run_in_executor(None, _run)
-    while True:
-        item = await queue.get()
-        if item is _DONE:
-            break
-        if isinstance(item, Exception):
-            raise item
-        yield item
+    try:
+        while True:
+            item = await queue.get()
+            if item is _DONE:
+                break
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        if proc and proc.poll() is None:
+            proc.terminate()
 
 
 async def pull_bugreport(serial: str) -> Path:
