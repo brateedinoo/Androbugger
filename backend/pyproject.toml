@@ -55,7 +55,19 @@ dev-dependencies = [
     "ruff>=0.8",
     "mypy>=1.13",
     "types-redis>=4.6",
+    "torch",  # explicit so [tool.uv.sources] can redirect it to the CPU index
 ]
+
+# Pin torch to the CPU-only index so the lock file doesn't pull in 2 GB of
+# CUDA packages on CI and non-GPU dev machines. GPU inference at runtime is
+# handled by Docker's NVIDIA container runtime (see docker-compose.yml).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.ruff]
 line-length = 120
