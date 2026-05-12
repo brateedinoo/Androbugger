@@ -4,8 +4,8 @@
     <div class="flex items-center gap-2 px-3 py-2 border-b border-[#2a2d3e] bg-[#161925] flex-shrink-0 flex-wrap">
       <!-- Connection indicator -->
       <div class="flex items-center gap-1.5 flex-shrink-0">
-        <div :class="['w-2 h-2 rounded-full', connected ? 'bg-green-400 animate-pulse' : 'bg-slate-600']" />
-        <span class="text-slate-400 text-xs">{{ connected ? 'Live' : 'Paused' }}</span>
+        <div :class="['w-2 h-2 rounded-full', connected ? 'bg-green-400 animate-pulse' : streamError ? 'bg-red-500' : 'bg-slate-600']" />
+        <span :class="['text-xs', streamError ? 'text-red-400' : 'text-slate-400']">{{ connected ? 'Live' : streamError ? 'Error' : 'Paused' }}</span>
       </div>
 
       <!-- Level filter -->
@@ -69,6 +69,12 @@
           Clear
         </button>
       </div>
+    </div>
+
+    <!-- Stream error banner -->
+    <div v-if="streamError" class="bg-red-950/60 border-b border-red-800 px-3 py-2 text-xs text-red-300 flex gap-2 items-center flex-shrink-0">
+      <span class="font-sans flex-1">ADB error: {{ streamError }}</span>
+      <button @click="streamError = ''; scheduleReconnect()" class="text-red-400 hover:text-red-200 flex-shrink-0">Retry</button>
     </div>
 
     <!-- Explanation popup -->
@@ -144,6 +150,7 @@ const tagFilter = ref('')
 const textFilter = ref('')
 const autoScroll = ref(true)
 const connected = ref(false)
+const streamError = ref('')
 const selectedLines = ref<LogLine[]>([])
 const explaining = ref(false)
 const explanation = ref('')
@@ -218,12 +225,18 @@ function connect() {
 
   ws.onopen = () => {
     connected.value = true
+    streamError.value = ''
     reconnectDelay = 1000
   }
 
   ws.onmessage = (event) => {
     try {
-      const line: LogLine = JSON.parse(event.data)
+      const msg = JSON.parse(event.data)
+      if (msg.error) {
+        streamError.value = msg.error
+        return
+      }
+      const line = msg as LogLine
       lines.value.push(line)
       if (lines.value.length > MAX_LINES) {
         lines.value = lines.value.slice(-MAX_LINES)
@@ -235,7 +248,7 @@ function connect() {
 
   ws.onclose = () => {
     connected.value = false
-    scheduleReconnect()
+    if (!streamError.value) scheduleReconnect()
   }
 
   ws.onerror = () => { connected.value = false }

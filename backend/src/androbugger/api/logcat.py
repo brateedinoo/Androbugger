@@ -1,6 +1,7 @@
 """Live logcat WebSocket streaming endpoint."""
 import asyncio
 import json
+import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -8,6 +9,7 @@ from androbugger.device import adb as adb_module
 from androbugger.parser.logcat import parse_line
 
 router = APIRouter(tags=["logcat"])
+logger = logging.getLogger(__name__)
 
 
 @router.websocket("/ws/logcat/{serial}")
@@ -51,7 +53,11 @@ async def ws_logcat(websocket: WebSocket, serial: str):
                 break
     except WebSocketDisconnect:
         pass
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.exception("logcat stream error for serial=%s", serial)
+        try:
+            await websocket.send_text(json.dumps({"error": str(exc)}))
+        except Exception:
+            pass
     finally:
         stop_event.set()
