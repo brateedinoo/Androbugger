@@ -55,7 +55,7 @@
       AI analysis in progress…
     </div>
 
-    <div v-else-if="session.status !== 'running' && !session.llm_report" class="text-slate-500 text-sm">
+    <div v-else-if="!session.llm_report" class="text-slate-500 text-sm">
       LLM unavailable — deterministic summary above is the full analysis.
     </div>
 
