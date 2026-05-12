@@ -59,7 +59,7 @@ git clone https://github.com/brateedinoo/androbugger.git
 cd androbugger
 
 # 2. Create your environment file
-cp .env.example .env
+cp .env.default .env
 ```
 
 Open `.env` and set at minimum:

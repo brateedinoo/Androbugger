@@ -7,5 +7,6 @@ dist/
 build/
 .env
 .env.*
+!.env.default
 node_modules/
 *.log
