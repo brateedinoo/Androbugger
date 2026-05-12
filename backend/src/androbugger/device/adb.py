@@ -48,21 +48,26 @@ async def shell_stream(serial: str, command: list[str]) -> AsyncGenerator[str, N
     """Stream output from a long-running ADB shell command line by line."""
     dev = _get_adb_device(serial)
     loop = asyncio.get_event_loop()
-    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    _DONE = object()
+    queue: asyncio.Queue = asyncio.Queue()
 
     def _run():
         try:
             for line in dev.shell(" ".join(command), stream=True):
                 loop.call_soon_threadsafe(queue.put_nowait, line)
+        except Exception as exc:
+            loop.call_soon_threadsafe(queue.put_nowait, exc)
         finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+            loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
     asyncio.get_event_loop().run_in_executor(None, _run)
     while True:
-        line = await queue.get()
-        if line is None:
+        item = await queue.get()
+        if item is _DONE:
             break
-        yield line
+        if isinstance(item, Exception):
+            raise item
+        yield item
 
 
 async def pull_bugreport(serial: str) -> Path:
