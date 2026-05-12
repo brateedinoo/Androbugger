@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
@@ -33,7 +34,11 @@ class PrivacyGate:
         for rec in all_recognizers(extra_asset_patterns):
             registry.add_recognizer(rec)
 
-        self._analyzer = AnalyzerEngine(registry=registry)
+        nlp_engine = NlpEngineProvider(nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+        }).create_engine()
+        self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine, registry=registry)
         self._anonymizer = AnonymizerEngine()
         self._mapper: PlaceholderMapper = get_mapper()
 
