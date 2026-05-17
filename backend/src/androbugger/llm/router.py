@@ -1,4 +1,5 @@
 """Provider-agnostic LLM router via LiteLLM with Privacy Gate integration."""
+import json
 import logging
 import time
 from collections.abc import AsyncGenerator
@@ -12,16 +13,25 @@ logger = logging.getLogger(__name__)
 
 litellm.set_verbose = False
 
-# Cache of provider_type → endpoint_url, loaded from DB on startup and refreshed on admin changes.
-_provider_endpoint_cache: dict[str, str] = {}
+# Cache of provider_type → full provider config (endpoint, api_key, auth_header,
+# temperature, top_p, extra_params). Loaded from DB on startup and refreshed on
+# admin changes via refresh_provider_cache().
+_provider_cache: dict[str, dict] = {}
 
 
 def refresh_provider_cache(providers: list[dict]) -> None:
-    global _provider_endpoint_cache
-    _provider_endpoint_cache = {
-        p["provider_type"]: p["endpoint_url"]
+    global _provider_cache
+    _provider_cache = {
+        p["provider_type"]: {
+            "endpoint_url": p.get("endpoint_url"),
+            "api_key": p.get("api_key"),
+            "auth_header": p.get("auth_header"),
+            "temperature": p.get("temperature"),
+            "top_p": p.get("top_p"),
+            "extra_params": p.get("extra_params"),
+        }
         for p in providers
-        if p.get("endpoint_url") and p.get("is_enabled")
+        if p.get("is_enabled")
     }
 
 
@@ -34,11 +44,36 @@ def is_local_provider(model: str) -> bool:
 
 
 def _extra_kwargs(model_id: str) -> dict:
-    if not is_local_provider(model_id):
-        return {}
+    """Build the per-call kwargs for litellm based on the admin-configured provider."""
     provider_type = model_id.split("/")[0]
-    base_url = _provider_endpoint_cache.get(provider_type) or settings.ollama_base_url
-    return {"api_base": base_url}
+    cfg = _provider_cache.get(provider_type, {})
+    kwargs: dict = {}
+
+    if is_local_provider(model_id):
+        base_url = cfg.get("endpoint_url") or settings.ollama_base_url
+        kwargs["api_base"] = base_url
+    else:
+        # Cloud providers: an explicit api_key in the DB overrides the env var.
+        if cfg.get("api_key"):
+            kwargs["api_key"] = cfg["api_key"]
+
+    if cfg.get("auth_header"):
+        kwargs["extra_headers"] = {"Authorization": cfg["auth_header"]}
+    if cfg.get("temperature") is not None:
+        kwargs["temperature"] = cfg["temperature"]
+    if cfg.get("top_p") is not None:
+        kwargs["top_p"] = cfg["top_p"]
+    if cfg.get("extra_params"):
+        try:
+            extra = json.loads(cfg["extra_params"])
+            if isinstance(extra, dict):
+                # caller-supplied kwargs from this function win on conflict
+                merged = {**extra, **kwargs}
+                kwargs = merged
+        except json.JSONDecodeError:
+            logger.warning("Provider %s has malformed extra_params, ignoring", provider_type)
+
+    return kwargs
 
 
 def _sanitize_messages(messages: list[dict], session_id: str | None, model_id: str) -> tuple[list[dict], int]:

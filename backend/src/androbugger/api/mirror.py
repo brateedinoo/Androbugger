@@ -3,13 +3,22 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+
+from androbugger.auth.middleware import decode_access_token
+from androbugger.auth.roles import role_gte
 
 router = APIRouter(tags=["mirror"])
 
 
 @router.websocket("/ws/mirror/{serial}")
 async def ws_mirror(serial: str, websocket: WebSocket) -> None:
+    token = websocket.query_params.get("token", "")
+    user = decode_access_token(token)
+    if user is None or not role_gte(user["role"], "technician"):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized")
+        return
+
     await websocket.accept()
 
     # Parse optional query params

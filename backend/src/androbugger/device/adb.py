@@ -2,6 +2,7 @@
 import asyncio
 import fnmatch
 import subprocess
+import sys
 import tempfile
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -46,36 +47,65 @@ async def shell(serial: str, command: list[str]) -> str:
 
 
 async def shell_stream(serial: str, command: list[str]) -> AsyncGenerator[str, None]:
-    """Stream output from a long-running ADB shell command line by line."""
+    """Stream output from a long-running ADB command line by line.
+
+    Spawns ``adb -s {serial} {command...}`` directly (no intervening ``shell``)
+    so streaming clients like ``logcat`` aren't subject to the device-side
+    libc block-buffering that ``adb shell`` inherits.
+    """
     loop = asyncio.get_event_loop()
     _DONE = object()
     queue: asyncio.Queue = asyncio.Queue()
     proc: subprocess.Popen | None = None
 
+    popen_kwargs: dict = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "bufsize": 1,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
     def _run():
         nonlocal proc
         try:
-            proc = subprocess.Popen(
-                ["adb", "-s", serial, "shell"] + command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                bufsize=1,
-            )
-            assert proc.stdout is not None
-            for raw in proc.stdout:
-                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                loop.call_soon_threadsafe(queue.put_nowait, line)
+            try:
+                proc = subprocess.Popen(["adb", "-s", serial] + command, **popen_kwargs)
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "adb binary not found on PATH — install Android Platform Tools"
+                ) from exc
+
+            if proc.stdout is None:
+                raise RuntimeError("adb subprocess started without a stdout pipe")
+
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                loop.call_soon_threadsafe(queue.put_nowait, line.rstrip("\r\n"))
+
             proc.wait()
             if proc.returncode != 0:
-                assert proc.stderr is not None
-                err = proc.stderr.read().decode("utf-8", errors="replace").strip()
+                err = ""
+                if proc.stderr is not None:
+                    err = proc.stderr.read().strip()
+                # Make the most common adb failures actionable in the UI banner
+                low = err.lower()
+                if "device" in low and "not found" in low:
+                    err = f"{err} — is the device plugged in and authorised?"
+                elif "no devices" in low or "no emulators" in low:
+                    err = "No devices or emulators connected"
                 raise RuntimeError(err or f"adb exited with code {proc.returncode}")
         except Exception as exc:
             loop.call_soon_threadsafe(queue.put_nowait, exc)
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, _DONE)
 
-    asyncio.get_event_loop().run_in_executor(None, _run)
+    loop.run_in_executor(None, _run)
     try:
         while True:
             item = await queue.get()

@@ -1,6 +1,8 @@
 """Admin REST endpoints: users, audit log, system stats."""
 import csv
 import io
+import json
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
@@ -238,6 +240,11 @@ class UpdateProviderRequest(BaseModel):
     model_name: str | None = None
     max_tokens: int | None = None
     is_default: bool | None = None
+    api_key: str | None = None        # omit field to leave unchanged; "" to clear
+    auth_header: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    extra_params: str | None = None   # JSON string; "" to clear
 
 
 class CreateProviderRequest(BaseModel):
@@ -246,6 +253,30 @@ class CreateProviderRequest(BaseModel):
     endpoint_url: str | None = None
     is_local: bool = True
     max_tokens: int = 4096
+    api_key: str | None = None
+    auth_header: str | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    extra_params: str | None = None
+
+
+def _validate_extra_params(raw: str | None) -> None:
+    """Raise 422 if extra_params is set but isn't a JSON object."""
+    if not raw:
+        return
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"extra_params must be valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=422, detail="extra_params must be a JSON object")
+
+
+def _redact_provider_row(row: dict) -> dict:
+    """Strip api_key from API responses; surface only whether it's set."""
+    out = dict(row)
+    out["api_key_set"] = bool(out.pop("api_key", None))
+    return out
 
 
 async def _reload_provider_cache(db) -> None:
@@ -258,7 +289,7 @@ async def _reload_provider_cache(db) -> None:
 async def list_llm_providers(user: Annotated[dict, Depends(require_role("admin"))]):
     async with get_db() as db:
         rows = await (await db.execute("SELECT * FROM llm_providers")).fetchall()
-    return {"providers": [dict(r) for r in rows]}
+    return {"providers": [_redact_provider_row(dict(r)) for r in rows]}
 
 
 @router.get("/llm-provider-models")
@@ -292,13 +323,27 @@ async def create_llm_provider(
     body: CreateProviderRequest,
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
+    _validate_extra_params(body.extra_params)
     provider_id = str(uuid.uuid4())
     async with get_db() as db:
         await db.execute(
             """INSERT INTO llm_providers
-               (id, provider_type, model_name, endpoint_url, is_local, is_default, is_enabled, priority, max_tokens)
-               VALUES (?, ?, ?, ?, ?, FALSE, TRUE, 0, ?)""",
-            (provider_id, body.provider_type, body.model_name, body.endpoint_url, body.is_local, body.max_tokens),
+               (id, provider_type, model_name, endpoint_url, is_local, is_default, is_enabled,
+                priority, max_tokens, api_key, auth_header, temperature, top_p, extra_params)
+               VALUES (?, ?, ?, ?, ?, FALSE, TRUE, 0, ?, ?, ?, ?, ?, ?)""",
+            (
+                provider_id,
+                body.provider_type,
+                body.model_name,
+                body.endpoint_url,
+                body.is_local,
+                body.max_tokens,
+                body.api_key or None,
+                body.auth_header or None,
+                body.temperature,
+                body.top_p,
+                body.extra_params or None,
+            ),
         )
         await db.commit()
         await _reload_provider_cache(db)
@@ -311,6 +356,9 @@ async def update_llm_provider(
     body: UpdateProviderRequest,
     user: Annotated[dict, Depends(require_role("admin"))],
 ):
+    if body.extra_params:
+        _validate_extra_params(body.extra_params)
+
     async with get_db() as db:
         row = await (await db.execute(
             "SELECT id FROM llm_providers WHERE id=?", (provider_id,)
@@ -326,13 +374,28 @@ async def update_llm_provider(
             params.append(body.enabled)
         if body.endpoint_url is not None:
             updates.append("endpoint_url=?")
-            params.append(body.endpoint_url)
+            params.append(body.endpoint_url or None)
         if body.model_name is not None:
             updates.append("model_name=?")
             params.append(body.model_name)
         if body.max_tokens is not None:
             updates.append("max_tokens=?")
             params.append(body.max_tokens)
+        if body.api_key is not None:
+            updates.append("api_key=?")
+            params.append(body.api_key or None)  # empty string clears
+        if body.auth_header is not None:
+            updates.append("auth_header=?")
+            params.append(body.auth_header or None)
+        if body.temperature is not None:
+            updates.append("temperature=?")
+            params.append(body.temperature)
+        if body.top_p is not None:
+            updates.append("top_p=?")
+            params.append(body.top_p)
+        if body.extra_params is not None:
+            updates.append("extra_params=?")
+            params.append(body.extra_params or None)
         if body.is_default is True:
             await db.execute("UPDATE llm_providers SET is_default=FALSE")
             updates.append("is_default=?")
@@ -361,6 +424,61 @@ async def delete_llm_provider(
             raise HTTPException(status_code=404, detail="Provider not found")
         await _reload_provider_cache(db)
     return {"ok": True}
+
+
+@router.post("/llm-providers/{provider_id}/test")
+async def test_llm_provider(
+    provider_id: str,
+    user: Annotated[dict, Depends(require_role("admin"))],
+):
+    """Send a single-token completion to verify the provider's connectivity and credentials."""
+    import asyncio
+
+    import litellm
+
+    async with get_db() as db:
+        row = await (await db.execute(
+            "SELECT * FROM llm_providers WHERE id=?", (provider_id,)
+        )).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    p = dict(row)
+
+    # Build the same kwargs the router would use, so this test reflects real behaviour.
+    model_id = f"{p['provider_type']}/{p['model_name']}"
+    kwargs: dict = {"max_tokens": 1}
+    if p.get("endpoint_url"):
+        kwargs["api_base"] = p["endpoint_url"]
+    if p.get("api_key"):
+        kwargs["api_key"] = p["api_key"]
+    if p.get("auth_header"):
+        kwargs["extra_headers"] = {"Authorization": p["auth_header"]}
+    if p.get("temperature") is not None:
+        kwargs["temperature"] = p["temperature"]
+    if p.get("top_p") is not None:
+        kwargs["top_p"] = p["top_p"]
+    if p.get("extra_params"):
+        try:
+            kwargs.update(json.loads(p["extra_params"]))
+        except json.JSONDecodeError:
+            pass  # ignore malformed stored value; UI validates on save
+
+    start = time.monotonic()
+    try:
+        await asyncio.wait_for(
+            litellm.acompletion(
+                model=model_id,
+                messages=[{"role": "user", "content": "ping"}],
+                **kwargs,
+            ),
+            timeout=10.0,
+        )
+    except TimeoutError:
+        return {"ok": False, "error": "Timed out after 10s"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    latency_ms = round((time.monotonic() - start) * 1000)
+    return {"ok": True, "model": model_id, "latency_ms": latency_ms}
 
 
 # ── Fine-tuning ────────────────────────────────────────────────────────────────

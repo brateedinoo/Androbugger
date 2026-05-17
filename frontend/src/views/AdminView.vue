@@ -236,10 +236,39 @@
               </div>
               <p v-if="newProviderModelsError" class="text-amber-400 text-xs mt-1">{{ newProviderModelsError }}</p>
             </div>
+            <div v-if="!newProvider.is_local">
+              <label class="text-xs text-slate-500 mb-1 block">API Key</label>
+              <input v-model="newProvider.api_key" type="password" placeholder="sk-…"
+                autocomplete="new-password"
+                class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
             <div>
-              <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
-              <input v-model.number="newProvider.max_tokens" type="number" min="256" max="200000"
-                class="w-32 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+              <label class="text-xs text-slate-500 mb-1 block">Authorization header <span class="text-slate-600">(optional)</span></label>
+              <input v-model="newProvider.auth_header" placeholder="Bearer …"
+                class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
+                <input v-model.number="newProvider.max_tokens" type="number" min="256" max="200000"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">Temperature</label>
+                <input v-model="newProvider.temperature" type="number" min="0" max="2" step="0.1" placeholder="default"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">Top-P</label>
+                <input v-model="newProvider.top_p" type="number" min="0" max="1" step="0.05" placeholder="default"
+                  class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+              </div>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500 mb-1 block">Extra params <span class="text-slate-600">(JSON, e.g. {"num_ctx": 8192})</span></label>
+              <textarea v-model="newProvider.extra_params" rows="2" placeholder='{"num_ctx": 8192}'
+                class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-xs font-mono focus:outline-none focus:border-blue-500" />
+              <p v-if="newProviderExtraError" class="text-red-400 text-xs mt-1">{{ newProviderExtraError }}</p>
             </div>
             <div class="flex gap-2">
               <button @click="addProvider" :disabled="!newProvider.model_name || providerSaving"
@@ -305,16 +334,62 @@
                   </div>
                   <p v-if="providerModelsError[p.id]" class="text-amber-400 text-xs mt-1">{{ providerModelsError[p.id] }}</p>
                 </div>
+                <div v-if="!p.is_local">
+                  <label class="text-xs text-slate-500 mb-1 block">API Key</label>
+                  <div v-if="p.api_key_set && !apiKeyReplaceMode[p.id]" class="flex items-center gap-2">
+                    <span class="text-green-400 text-xs">✓ Key configured</span>
+                    <button @click="apiKeyReplaceMode[p.id] = true"
+                      class="text-xs text-blue-400 hover:text-blue-300 underline">Replace</button>
+                  </div>
+                  <input v-else v-model="providerEdits[p.id].api_key" type="password"
+                    :placeholder="p.api_key_set ? 'Enter new key (or leave blank to keep existing)' : 'sk-…'"
+                    autocomplete="new-password"
+                    class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                </div>
                 <div>
-                  <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
-                  <input v-model.number="providerEdits[p.id].max_tokens" type="number" min="256" max="200000"
-                    class="w-32 px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                  <label class="text-xs text-slate-500 mb-1 block">Authorization header <span class="text-slate-600">(optional)</span></label>
+                  <input v-model="providerEdits[p.id].auth_header" placeholder="Bearer …"
+                    class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">Max tokens</label>
+                    <input v-model.number="providerEdits[p.id].max_tokens" type="number" min="256" max="200000"
+                      class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">Temperature</label>
+                    <input v-model="providerEdits[p.id].temperature" type="number" min="0" max="2" step="0.1" placeholder="default"
+                      class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label class="text-xs text-slate-500 mb-1 block">Top-P</label>
+                    <input v-model="providerEdits[p.id].top_p" type="number" min="0" max="1" step="0.05" placeholder="default"
+                      class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">Extra params <span class="text-slate-600">(JSON, e.g. {"num_ctx": 8192})</span></label>
+                  <textarea v-model="providerEdits[p.id].extra_params" rows="2" placeholder='{"num_ctx": 8192}'
+                    class="w-full px-3 py-2 rounded-lg bg-[#0f1117] border border-[#2a2d3e] text-slate-300 text-xs font-mono focus:outline-none focus:border-blue-500" />
                 </div>
                 <div class="flex gap-2 flex-wrap items-center">
                   <button @click="saveProvider(p)" :disabled="providerSaving"
                     class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm transition">
                     {{ providerSaving ? 'Saving…' : 'Save' }}
                   </button>
+                  <button @click="testProvider(p)" :disabled="!!providerTestLoading[p.id]"
+                    class="px-4 py-2 rounded-lg border border-blue-700 text-blue-400 hover:bg-blue-900/30 disabled:opacity-50 text-sm transition">
+                    {{ providerTestLoading[p.id] ? 'Testing…' : 'Test connection' }}
+                  </button>
+                  <span v-if="providerTestResult[p.id]"
+                    :class="providerTestResult[p.id].ok
+                      ? 'px-2.5 py-1 rounded-full text-xs bg-green-900/40 text-green-300 border border-green-700'
+                      : 'px-2.5 py-1 rounded-full text-xs bg-red-900/40 text-red-300 border border-red-700'">
+                    {{ providerTestResult[p.id].ok
+                      ? `✓ ${providerTestResult[p.id].latency_ms} ms`
+                      : `✗ ${providerTestResult[p.id].error}` }}
+                  </span>
                   <button v-if="!p.is_default" @click="setDefault(p)" :disabled="providerSaving"
                     class="px-4 py-2 rounded-lg border border-yellow-700 text-yellow-400 hover:bg-yellow-900/30 disabled:opacity-50 text-sm transition">
                     Set as default
@@ -758,11 +833,26 @@ const providerModelsLoading = ref<Record<string, boolean>>({})
 const providerModelsError = ref<Record<string, string>>({})
 const providerSaving = ref(false)
 const providerSaveError = ref('')
+const apiKeyReplaceMode = ref<Record<string, boolean>>({})
+const providerTestLoading = ref<Record<string, boolean>>({})
+const providerTestResult = ref<Record<string, { ok: boolean; latency_ms?: number; error?: string }>>({})
 const showAddProvider = ref(false)
-const newProvider = ref({ provider_type: 'ollama', model_name: '', endpoint_url: 'http://ollama:11434', is_local: true, max_tokens: 4096 })
+const newProvider = ref({
+  provider_type: 'ollama',
+  model_name: '',
+  endpoint_url: 'http://ollama:11434',
+  is_local: true,
+  max_tokens: 4096,
+  api_key: '',
+  auth_header: '',
+  temperature: '' as number | '',
+  top_p: '' as number | '',
+  extra_params: '',
+})
 const newProviderModels = ref<string[]>([])
 const newProviderModelsLoading = ref(false)
 const newProviderModelsError = ref('')
+const newProviderExtraError = ref('')
 
 async function loadProviders() {
   try {
@@ -780,7 +870,14 @@ function toggleExpand(id: string) {
       endpoint_url: p.endpoint_url || '',
       model_name: p.model_name || '',
       max_tokens: p.max_tokens || 4096,
+      api_key: '',  // never pre-fill; use replace-mode toggle
+      auth_header: p.auth_header || '',
+      temperature: p.temperature ?? '',
+      top_p: p.top_p ?? '',
+      extra_params: p.extra_params || '',
     }
+    apiKeyReplaceMode.value[id] = false
+    delete providerTestResult.value[id]
     loadProviderModels(p)
   }
 }
@@ -822,16 +919,64 @@ async function saveProvider(p: any) {
   providerSaveError.value = ''
   try {
     const edit = providerEdits.value[p.id]
+    // Validate extra_params JSON client-side so the user gets immediate feedback
+    if (edit.extra_params) {
+      try {
+        const parsed = JSON.parse(edit.extra_params)
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+          throw new Error('extra_params must be a JSON object')
+        }
+      } catch (e: any) {
+        providerSaveError.value = `extra_params: ${e.message}`
+        return
+      }
+    }
+    const body: Record<string, any> = {
+      endpoint_url: edit.endpoint_url || null,
+      model_name: edit.model_name,
+      max_tokens: edit.max_tokens,
+      auth_header: edit.auth_header || '',
+      temperature: edit.temperature === '' || edit.temperature == null ? null : Number(edit.temperature),
+      top_p: edit.top_p === '' || edit.top_p == null ? null : Number(edit.top_p),
+      extra_params: edit.extra_params || '',
+    }
+    // Only send api_key if the user typed something — omitting it leaves the existing key.
+    if (edit.api_key) body.api_key = edit.api_key
     await $fetch(`/api/admin/llm-providers/${p.id}`, {
       method: 'PATCH',
-      body: { endpoint_url: edit.endpoint_url || null, model_name: edit.model_name, max_tokens: edit.max_tokens },
+      body,
       headers: auth.authHeaders(),
     })
-    Object.assign(p, { endpoint_url: edit.endpoint_url, model_name: edit.model_name, max_tokens: edit.max_tokens })
+    Object.assign(p, {
+      endpoint_url: edit.endpoint_url,
+      model_name: edit.model_name,
+      max_tokens: edit.max_tokens,
+      auth_header: body.auth_header,
+      temperature: body.temperature,
+      top_p: body.top_p,
+      extra_params: body.extra_params,
+      api_key_set: p.api_key_set || !!edit.api_key,
+    })
+    apiKeyReplaceMode.value[p.id] = false
     expandedProvider.value = null
   } catch (e: any) {
     providerSaveError.value = e?.data?.detail || 'Save failed'
   } finally { providerSaving.value = false }
+}
+
+async function testProvider(p: any) {
+  providerTestLoading.value[p.id] = true
+  try {
+    const result = await $fetch(`/api/admin/llm-providers/${p.id}/test`, {
+      method: 'POST', headers: auth.authHeaders(),
+    })
+    providerTestResult.value[p.id] = result
+  } catch (e: any) {
+    providerTestResult.value[p.id] = { ok: false, error: e?.data?.detail || e.message || 'Test failed' }
+  } finally {
+    providerTestLoading.value[p.id] = false
+    setTimeout(() => { delete providerTestResult.value[p.id] }, 10000)
+  }
 }
 
 async function setDefault(p: any) {
@@ -873,22 +1018,51 @@ async function fetchNewProviderModels() {
 }
 
 async function addProvider() {
+  newProviderExtraError.value = ''
+  if (newProvider.value.extra_params) {
+    try {
+      const parsed = JSON.parse(newProvider.value.extra_params)
+      if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+        throw new Error('must be a JSON object')
+      }
+    } catch (e: any) {
+      newProviderExtraError.value = e.message
+      return
+    }
+  }
   providerSaving.value = true
   try {
+    const np = newProvider.value
     await $fetch('/api/admin/llm-providers', {
       method: 'POST',
       body: {
-        provider_type: newProvider.value.provider_type,
-        model_name: newProvider.value.model_name,
-        endpoint_url: newProvider.value.endpoint_url || null,
-        is_local: newProvider.value.is_local,
-        max_tokens: newProvider.value.max_tokens,
+        provider_type: np.provider_type,
+        model_name: np.model_name,
+        endpoint_url: np.endpoint_url || null,
+        is_local: np.is_local,
+        max_tokens: np.max_tokens,
+        api_key: np.api_key || null,
+        auth_header: np.auth_header || null,
+        temperature: np.temperature === '' || np.temperature == null ? null : Number(np.temperature),
+        top_p: np.top_p === '' || np.top_p == null ? null : Number(np.top_p),
+        extra_params: np.extra_params || null,
       },
       headers: auth.authHeaders(),
     })
     await loadProviders()
     showAddProvider.value = false
-    newProvider.value = { provider_type: 'ollama', model_name: '', endpoint_url: 'http://ollama:11434', is_local: true, max_tokens: 4096 }
+    newProvider.value = {
+      provider_type: 'ollama',
+      model_name: '',
+      endpoint_url: 'http://ollama:11434',
+      is_local: true,
+      max_tokens: 4096,
+      api_key: '',
+      auth_header: '',
+      temperature: '',
+      top_p: '',
+      extra_params: '',
+    }
     newProviderModels.value = []
   } catch (e: any) { alert(e?.data?.detail || 'Add failed') } finally {
     providerSaving.value = false

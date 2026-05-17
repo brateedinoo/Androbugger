@@ -221,12 +221,15 @@ watch(filteredLines, () => {
 function connect() {
   if (ws) ws.close()
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${proto}//${location.host}/ws/logcat/${props.deviceSerial}`)
+  const token = encodeURIComponent(auth.token ?? '')
+  ws = new WebSocket(`${proto}//${location.host}/ws/logcat/${props.deviceSerial}?token=${token}`)
 
   ws.onopen = () => {
-    connected.value = true
     streamError.value = ''
     reconnectDelay = 1000
+    // Wait for the backend's {"status":"connected"} ack before flipping the
+    // status dot to green — the WS may open and then immediately error out
+    // (device missing, adb not found) and we don't want a fake "Live" flash.
   }
 
   ws.onmessage = (event) => {
@@ -234,6 +237,11 @@ function connect() {
       const msg = JSON.parse(event.data)
       if (msg.error) {
         streamError.value = msg.error
+        connected.value = false
+        return
+      }
+      if (msg.status === 'connected') {
+        connected.value = true
         return
       }
       const line = msg as LogLine

@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
         )
         await asyncio.wait_for(proc.communicate(), timeout=10.0)
         logger.info("ADB server started (exit %s)", proc.returncode)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         logger.warning("adb start-server timed out after 10s")
     except FileNotFoundError:

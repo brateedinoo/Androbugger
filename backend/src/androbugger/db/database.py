@@ -48,6 +48,7 @@ def _get_migrations() -> list[tuple[int, str]]:
         (2, _MIGRATION_002),
         (3, _MIGRATION_003),
         (4, _MIGRATION_004),
+        (5, _MIGRATION_005),
     ]
 
 
@@ -358,4 +359,15 @@ CREATE TABLE IF NOT EXISTS retention_policies (
     updated_by TEXT NOT NULL REFERENCES users(id),
     updated_at TEXT NOT NULL
 );
+"""
+
+_MIGRATION_005 = """
+-- Per-provider credentials and sampling parameters so admins can configure
+-- providers from the UI instead of editing env vars or SQLite by hand.
+-- All columns nullable so existing rows remain valid; NULL = "use the default".
+ALTER TABLE llm_providers ADD COLUMN api_key TEXT;
+ALTER TABLE llm_providers ADD COLUMN auth_header TEXT;
+ALTER TABLE llm_providers ADD COLUMN temperature REAL;
+ALTER TABLE llm_providers ADD COLUMN top_p REAL;
+ALTER TABLE llm_providers ADD COLUMN extra_params TEXT;
 """

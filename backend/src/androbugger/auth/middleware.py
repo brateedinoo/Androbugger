@@ -38,6 +38,23 @@ def _decode_token(token: str) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
 
+def decode_access_token(token: str) -> dict | None:
+    """Decode an access JWT for non-HTTP contexts (e.g. WebSocket query params).
+
+    Returns the user dict on success, or None if the token is missing/invalid/wrong-type.
+    Never raises — callers handle the None case themselves (WS close with policy code).
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[_ALGORITHM])
+    except JWTError:
+        return None
+    if payload.get("type") != "access":
+        return None
+    return {"id": payload["sub"], "username": payload["username"], "role": payload["role"]}
+
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> dict:

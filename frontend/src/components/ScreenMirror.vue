@@ -54,8 +54,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{ deviceSerial: string }>()
+
+const auth = useAuthStore()
 
 const fps = ref(2)
 const quality = ref(75)
@@ -88,7 +91,8 @@ function connect() {
   errorMsg.value = ''
 
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const url = `${proto}://${location.host}/ws/mirror/${props.deviceSerial}?fps=${fps.value}&quality=${quality.value}`
+  const token = encodeURIComponent(auth.token ?? '')
+  const url = `${proto}://${location.host}/ws/mirror/${props.deviceSerial}?fps=${fps.value}&quality=${quality.value}&token=${token}`
   ws = new WebSocket(url)
   ws.binaryType = 'arraybuffer'
 
