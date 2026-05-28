@@ -48,19 +48,31 @@ apt-get update
 apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
     android-sdk-platform-tools android-sdk-platform-tools-common \
-    nodejs npm \
     redis-server \
     build-essential libffi-dev \
-    openssl ca-certificates curl
+    openssl ca-certificates curl gnupg rsync
 
-# Node 22+ is required for the frontend build. apt on older releases may ship
-# Node 18; if so, install via NodeSource.
-NODE_MAJOR=$(node -v 2>/dev/null | sed -E 's/v([0-9]+)\..*/\1/' || echo 0)
-if [[ "${NODE_MAJOR}" -lt 20 ]]; then
-    warn "Detected Node ${NODE_MAJOR}; installing Node 22 from NodeSource."
+# Node.js: install from NodeSource (the Debian/Ubuntu `npm` apt package pulls
+# in dozens of node-* deps that frequently conflict — skip it entirely).
+# NodeSource's `nodejs` package bundles a matching `npm`.
+NEED_NODE=1
+if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    NODE_MAJOR=$(node -v | sed -E 's/v([0-9]+)\..*/\1/')
+    if [[ "${NODE_MAJOR}" -ge 20 ]]; then
+        log "Node ${NODE_MAJOR} already installed; skipping Node setup."
+        NEED_NODE=0
+    fi
+fi
+if [[ "${NEED_NODE}" -eq 1 ]]; then
+    log "Installing Node.js 22 from NodeSource (bundles npm)..."
+    # If a half-installed apt `npm` is wedging things, remove it before adding
+    # the NodeSource repo. Safe no-op when not installed.
+    apt-get remove -y npm libnode-dev nodejs nodejs-doc 2>/dev/null || true
+    apt-get autoremove -y || true
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
     apt-get install -y nodejs
 fi
+log "Node: $(node -v)  npm: $(npm -v)"
 
 # ---------------------------------------------------------------------------
 # 2. uv (Python package manager)
