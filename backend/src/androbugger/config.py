@@ -12,18 +12,21 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Storage
-    data_dir: Path = Path("/data/androbugger")
-    bugreport_dir: Path = Path("/data/androbugger/bugreports")
-    parsed_dir: Path = Path("/data/androbugger/parsed")
-    db_path: Path = Path("/data/androbugger/androbugger.db")
-    plugin_dir: Path = Path("/app/plugins")
-    chroma_path: Path = Path("/data/androbugger/chroma")
-    tantivy_path: Path = Path("/data/androbugger/tantivy")
+    data_dir: Path = Path("/var/lib/androbugger")
+    bugreport_dir: Path = Path("/var/lib/androbugger/bugreports")
+    parsed_dir: Path = Path("/var/lib/androbugger/parsed")
+    db_path: Path = Path("/var/lib/androbugger/androbugger.db")
+    plugin_dir: Path = Path("/opt/androbugger/backend/plugins")
+    chroma_path: Path = Path("/var/lib/androbugger/chroma")
+    tantivy_path: Path = Path("/var/lib/androbugger/tantivy")
+
+    # Frontend static assets (empty = don't mount; dev mode uses Vite on :5173)
+    frontend_dist: str = ""
 
     # LLM
     default_llm_model: str = "ollama/qwen3:14b"
     fallback_llm_model: str = "ollama/qwen3:8b"
-    ollama_base_url: str = "http://ollama:11434"
+    ollama_base_url: str = "http://127.0.0.1:11434"
     embedding_model: str = "nomic-embed-text"
     llm_max_tokens: int = 4096
 
@@ -34,7 +37,7 @@ class Settings(BaseSettings):
     admin_password: str = ""  # If set, resets the admin user's password on every startup
 
     # Redis (arq)
-    redis_url: str = "redis://redis:6379"
+    redis_url: str = "redis://127.0.0.1:6379"
 
     # Privacy gate
     enable_privacy_gate: bool = True
