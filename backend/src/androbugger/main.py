@@ -231,7 +231,7 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
-# Serve frontend static files in production
-_frontend_dist = Path(__file__).parent.parent.parent.parent.parent / "frontend" / "dist"
-if _frontend_dist.exists():
+# Serve frontend static files in production (configured via ANDROBUGGER_FRONTEND_DIST)
+_frontend_dist = Path(settings.frontend_dist) if settings.frontend_dist else None
+if _frontend_dist and _frontend_dist.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="static")

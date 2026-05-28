@@ -11,7 +11,7 @@ device's own logs — typically in under 5 minutes.
 ## Table of Contents
 
 - [What it does](#what-it-does)
-- [Quick Start — Docker (recommended)](#quick-start--docker-recommended)
+- [Quick Start — Native Linux install](#quick-start--native-linux-install)
 - [Development Setup](#development-setup)
 - [Configuration Reference](#configuration-reference)
 - [Roles and Permissions](#roles-and-permissions)
@@ -41,75 +41,52 @@ by default.
 
 ---
 
-## Quick Start — Docker (recommended)
+## Quick Start — Native Linux install
+
+Androbugger installs directly on a Debian or Ubuntu host as a set of systemd services. There
+is no Docker, no Caddy, no container networking — ADB and Ollama run as first-class native
+daemons so USB and model management behave normally.
 
 ### Prerequisites
 
-- Docker Engine 24+ and Docker Compose v2
-- The host machine must have `udev` rules or equivalent so the backend container can see USB
-  devices. On most Linux hosts this works automatically with the `privileged: true` setting in
-  `docker-compose.yml`.
-- ~10 GB of free disk space for the default Ollama models.
+- Debian 12+ or Ubuntu 22.04+ (apt-based)
+- `sudo` / root access for the installer
+- ~10 GB of free disk space for the default Ollama models
 
-### Guided setup (recommended)
+### Install
 
 ```bash
 git clone https://github.com/brateedinoo/androbugger.git
 cd androbugger
-./scripts/setup.sh
+sudo ./scripts/install.sh
 ```
 
-The script checks prerequisites, generates a secure `SECRET_KEY`, asks how you want to
-configure the LLM (local Ollama or cloud), and asks whether to deploy via `docker compose`
-on this machine or to print a ready-to-paste env block for Portainer / another Docker GUI.
+The installer:
 
-Once the stack is up, open **http://localhost** and log in with **admin / admin**. You will
-immediately be prompted to set a new password — do so before doing anything else.
+- `apt install`s system packages (`android-sdk-platform-tools`, `redis-server`, `nodejs`,
+  `python3`, build tools)
+- Installs `uv` and Ollama via their official installers, then pulls `qwen3:14b`,
+  `qwen3:8b`, and `nomic-embed-text`
+- Creates a dedicated `androbugger` system user (member of `plugdev` for USB access)
+- Lays out `/opt/androbugger` (code), `/etc/androbugger/androbugger.env` (config),
+  `/var/lib/androbugger` (data)
+- Builds the backend venv and the frontend bundle
+- Enables `redis-server`, `ollama`, and `androbugger-backend` systemd units
 
-<details>
-<summary><strong>Manual setup</strong> (if you'd rather do it by hand)</summary>
+When it finishes, open **http://&lt;host&gt;:8000** and log in with **admin / admin**. You will
+be prompted to set a new password immediately — do so before anything else.
+
+### Managing the services
 
 ```bash
-cp .env.default .env
-# Edit .env and set SECRET_KEY to a long random string (openssl rand -hex 32)
-docker compose up -d
-docker compose exec ollama ollama pull qwen3:14b
-docker compose exec ollama ollama pull nomic-embed-text
-docker compose ps
+systemctl status androbugger-backend
+journalctl -u androbugger-backend -f
+sudo systemctl restart androbugger-backend
 ```
 
-</details>
-
-<details>
-<summary><strong>Portainer GUI deployment</strong></summary>
-
-If you manage Docker through Portainer, deploy Androbugger as a Stack:
-
-1. **Generate the env block.** On any machine with `bash` and `openssl`, clone the repo and
-   run `./scripts/setup.sh`. When asked, choose **"Portainer or another Docker GUI"**. The
-   script prints (and optionally saves to `portainer-env.txt`) a ready-to-paste env block
-   including a freshly generated `SECRET_KEY`. *(Or, generate manually:
-   `openssl rand -hex 32` and copy the relevant variables from `.env.default`.)*
-
-2. **Create the stack in Portainer.**
-   - Portainer → **Stacks** → **Add stack**.
-   - Build method: **Repository** (point at the Androbugger Git repo and
-     `docker-compose.yml`), or **Upload** the `docker-compose.yml` from your local clone.
-   - Under **Environment variables**, paste the block from step 1.
-   - Click **Deploy the stack**.
-
-3. **Pull the Ollama models.** Once the stack is running, open the `ollama` container in
-   Portainer → **Console** (`/bin/sh`) and run:
-
-   ```
-   ollama pull qwen3:14b
-   ollama pull nomic-embed-text
-   ```
-
-4. **Open the app.** Visit the host's port 80 (or whatever you mapped Caddy to) and log in
-   as `admin` / `admin`.
-
-</details>
+Backend logs go to the journal. Application data (SQLite, vector and search indexes,
+bugreports) lives in `/var/lib/androbugger/`. Configuration overrides live in
+`/etc/androbugger/androbugger.env`.
 
 ### Connecting a device
 
@@ -132,12 +109,12 @@ Then enter the device IP and port in Androbugger's "Connect TCP" dialog.
 ### Updating
 
 ```bash
+cd /path/to/androbugger-checkout
 git pull
-docker compose build
-docker compose up -d
+sudo ./scripts/install.sh   # idempotent: re-syncs source, rebuilds, restarts the service
 ```
 
-Database migrations run automatically on startup.
+Database migrations run automatically on backend startup.
 
 ---
 
@@ -166,7 +143,7 @@ uv run uvicorn androbugger.main:app --reload --port 8000
 The backend starts at **http://localhost:8000**. Interactive API docs are at
 http://localhost:8000/docs (Swagger) and http://localhost:8000/redoc.
 
-The SQLite database and data directories are created automatically under `/data/androbugger/`.
+The SQLite database and data directories are created automatically under `/var/lib/androbugger/` (or whatever `ANDROBUGGER_DATA_DIR` points at — for local dev, override it to a path under your home directory).
 To use a local path during development, set the env var:
 
 ```bash
@@ -207,19 +184,22 @@ uv run ruff check src/
 
 ## Configuration Reference
 
-All settings are read from environment variables prefixed with `ANDROBUGGER_`, or from a `.env`
-file in the project root. In Docker, set them under the `environment:` key in `docker-compose.yml`
-or override with a `.env` file.
+All settings are read from environment variables prefixed with `ANDROBUGGER_`. In a native
+install, the installer writes defaults into `/etc/androbugger/androbugger.env`, which is
+loaded by the systemd unit (`EnvironmentFile=`). Edit that file and
+`sudo systemctl restart androbugger-backend` to apply changes. For local development,
+a `.env` file in `backend/` is also picked up.
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANDROBUGGER_SECRET_KEY` | `change-me-in-production-...` | **Required in production.** JWT signing key. Use a random 64-char string. |
+| `ANDROBUGGER_SECRET_KEY` | *(generated by installer)* | **Required in production.** JWT signing key. Use a random 64-char string. |
 | `ANDROBUGGER_DEFAULT_LLM_MODEL` | `ollama/qwen3:14b` | Primary LLM. Use `ollama/<model>` for local, `anthropic/claude-...` for cloud. |
 | `ANDROBUGGER_FALLBACK_LLM_MODEL` | `ollama/qwen3:8b` | Used when primary fails or is unavailable. |
-| `ANDROBUGGER_OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama API endpoint. |
-| `ANDROBUGGER_REDIS_URL` | `redis://redis:6379` | Redis for background job queues. |
-| `ANDROBUGGER_DB_PATH` | `/data/androbugger/androbugger.db` | SQLite database file path. |
-| `ANDROBUGGER_DATA_DIR` | `/data/androbugger` | Root for bugreports, parsed output, ChromaDB, Tantivy indexes. |
+| `ANDROBUGGER_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama API endpoint. |
+| `ANDROBUGGER_REDIS_URL` | `redis://127.0.0.1:6379` | Redis for background job queues. |
+| `ANDROBUGGER_DB_PATH` | `/var/lib/androbugger/androbugger.db` | SQLite database file path. |
+| `ANDROBUGGER_DATA_DIR` | `/var/lib/androbugger` | Root for bugreports, parsed output, ChromaDB, Tantivy indexes. |
+| `ANDROBUGGER_FRONTEND_DIST` | `/opt/androbugger/frontend/dist` | Built frontend bundle served by FastAPI. Leave empty in dev (Vite serves on :5173). |
 | `ANDROBUGGER_ENABLE_PRIVACY_GATE` | `true` | Strip PII before cloud LLM calls. Disable only for local-only deployments. |
 | `ANDROBUGGER_ACCESS_TOKEN_EXPIRE_HOURS` | `8` | JWT access token lifetime. |
 | `ANDROBUGGER_MCP_API_KEY` | *(empty)* | API key for the MCP server endpoint. Set to enable Claude Desktop integration. |
@@ -253,20 +233,17 @@ provider is configured.
 
 ### GPU acceleration for Ollama
 
-Uncomment the `deploy:` block in `docker-compose.yml`:
+The native `ollama` service uses the host's GPU automatically when an NVIDIA driver
+(and `nvidia-container-toolkit` is *not* required here, since we're not in a container)
+or a supported AMD/Apple GPU is present. Verify with:
 
-```yaml
-  ollama:
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+```bash
+ollama ps   # shows whether the loaded model is on CPU or GPU
+journalctl -u ollama -n 50
 ```
 
-Then rebuild: `docker compose up -d --build ollama`.
+If GPU is missing despite a working driver, see Ollama's docs at
+<https://github.com/ollama/ollama/blob/main/docs/gpu.md>.
 
 ---
 
@@ -477,35 +454,38 @@ See [docs/mcp-integration.md](docs/mcp-integration.md) for all available tools.
 
 ```
 Browser (Vue 3 + PrimeVue + Pinia)
-  │  REST (HTTPS) + WebSocket (wss://)
+  │  REST + WebSocket
   ▼
-Caddy  ──────────────────── reverse proxy (ports 80 / 443)
+FastAPI backend (systemd: androbugger-backend.service, port 8000)
+  │  - serves the built SPA bundle from /opt/androbugger/frontend/dist
+  │  - exposes /api/* and /ws/* on the same port (no separate proxy)
   │
-  ├─► FastAPI backend (port 8000)
-  │     ├── Auth layer         (JWT, argon2 password hashing, RBAC)
-  │     ├── Device layer       (adbutils, USB + TCP/IP ADB, WebSocket status broadcast)
-  │     ├── Diagnostic engine  (bugreport pull → parse → LLM → verify → store)
-  │     │     ├── Parser layer (bugreport, logcat, ANR, tombstone, dmesg, dumpsys, thermal, HW)
-  │     │     ├── LLM layer    (LiteLLM → Ollama local / cloud providers)
-  │     │     ├── Privacy gate (Presidio — strips PII before any cloud LLM call)
-  │     │     └── Verifier     (citation check — each LLM claim traced to parsed evidence)
-  │     ├── Knowledge layer    (ChromaDB vectors + Tantivy BM25 hybrid search)
-  │     ├── Plugin system      (inotify-watched directory, 3-stage validation, sandbox)
-  │     ├── Analytics          (SQL aggregations over diagnostic_sessions)
-  │     ├── Webhooks           (outbound HTTP, HMAC signatures, retry)
-  │     ├── Scheduler          (croniter-based, per-device and per-group)
-  │     ├── MCP server         (Model Context Protocol for Claude Desktop)
-  │     └── Fine-tuning        (export JSONL training data, ROUGE-L evaluation)
-  │
-  ├─► Ollama  (local LLM inference, port 11434)
-  ├─► Redis   (arq job queue for background tasks)
-  └─► SQLite  (primary database, WAL mode, 4 migrations)
+  ├── Auth layer         (JWT, argon2 password hashing, RBAC)
+  ├── Device layer       (adbutils, USB + TCP/IP ADB, WebSocket status broadcast)
+  ├── Diagnostic engine  (bugreport pull → parse → LLM → verify → store)
+  │     ├── Parser layer (bugreport, logcat, ANR, tombstone, dmesg, dumpsys, thermal, HW)
+  │     ├── LLM layer    (LiteLLM → Ollama local / cloud providers)
+  │     ├── Privacy gate (Presidio — strips PII before any cloud LLM call)
+  │     └── Verifier     (citation check — each LLM claim traced to parsed evidence)
+  ├── Knowledge layer    (ChromaDB vectors + Tantivy BM25 hybrid search)
+  ├── Plugin system      (inotify-watched directory, 3-stage validation, sandbox)
+  ├── Analytics          (SQL aggregations over diagnostic_sessions)
+  ├── Webhooks           (outbound HTTP, HMAC signatures, retry)
+  ├── Scheduler          (croniter-based, per-device and per-group)
+  ├── MCP server         (Model Context Protocol for Claude Desktop)
+  └── Fine-tuning        (export JSONL training data, ROUGE-L evaluation)
+
+External native services (also systemd):
+  ├─► Ollama  (local LLM inference, 127.0.0.1:11434)
+  ├─► Redis   (arq job queue for background tasks, 127.0.0.1:6379)
+  ├─► ADB     (platform-tools daemon on 127.0.0.1:5037, USB via plugdev + udev)
+  └─► SQLite  (file-backed primary database, WAL mode, 4 migrations)
 ```
 
 ### Data storage layout
 
 ```
-/data/androbugger/
+/var/lib/androbugger/
   androbugger.db        ← SQLite (users, sessions, knowledge, webhooks, audit log, ...)
   bugreports/           ← raw bugreport zips pulled from devices
   parsed/               ← JSON parsed output per session
@@ -538,7 +518,7 @@ Caddy  ──────────────────── reverse prox
 
 ## API Reference
 
-The full interactive API reference is available at http://localhost/docs when the server is running.
+The full interactive API reference is available at http://&lt;host&gt;:8000/docs when the server is running.
 
 Key endpoint groups:
 

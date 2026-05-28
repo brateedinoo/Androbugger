@@ -1,0 +1,24 @@
+[Unit]
+Description=Androbugger backend (FastAPI)
+After=network-online.target redis-server.service ollama.service
+Wants=network-online.target redis-server.service ollama.service
+
+[Service]
+Type=simple
+User=androbugger
+Group=androbugger
+SupplementaryGroups=plugdev
+WorkingDirectory=/opt/androbugger/backend
+EnvironmentFile=/etc/androbugger/androbugger.env
+ExecStart=/opt/androbugger/backend/.venv/bin/uvicorn androbugger.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=3
+# Hardening (relaxed where ADB needs USB access)
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/androbugger
+
+[Install]
+WantedBy=multi-user.target
